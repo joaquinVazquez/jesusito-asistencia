@@ -59,6 +59,39 @@ def generar_reporte_asistencia(ruta_destino): # Ahora recibe la ruta elegida por
     except Exception as e:
         print(f"[ERROR PDF] {e}")
         return False
+    
+from datetime import datetime
+
+def calcular_horas(entrada, salida):
+    """Calcula la diferencia de horas entre dos strings (HH:MM)."""
+    fmt = '%H:%M'
+    tdelta = datetime.strptime(salida, fmt) - datetime.strptime(entrada, fmt)
+    return tdelta.total_seconds() / 3600 # Retorna horas en decimal (ej. 7.5)
+
+# En la función generar_reporte_asistencia, cambia la consulta SQL:
+# SELECT e.nombre, a.fecha, a.hora, a.tipo_registro, e.pago_hora 
+# FROM asistencia a JOIN empleados e ON a.empleado_nombre = e.nombre    
+
+def generar_reporte_semanal_pdf(ruta_destino):
+    pdf = FPDF(orientation="L", unit="mm", format="Letter") # L = Landscape (Horizontal)
+    pdf.add_page()
+    
+    # Configuración de fuente pequeña para que quepan 10 columnas
+    pdf.set_font("helvetica", "B", 8)
+    pdf.set_fill_color(220, 168, 100) # Dorado
+    
+    columnas = ["Personal", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom", "Hrs Tot", "Salario"]
+    anchos = [40, 22, 22, 22, 22, 22, 22, 22, 22, 25]
+
+    for i, col in enumerate(columnas):
+        pdf.cell(anchos[i], 8, col, border=1, fill=True, align="C")
+    pdf.ln()
+
+    # LÓGICA DE PROCESAMIENTO:
+    # 1. Consultamos asistencia y empleados (JOIN)
+    # 2. Iteramos por empleado
+    # 3. Buscamos registros de cada día de la semana actual
+    # 4. Calculamos Horas Totales * pago_hora
 
 if __name__ == "__main__":
     print("--- Generando Corte Operativo ---")

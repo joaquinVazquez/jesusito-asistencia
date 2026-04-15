@@ -37,13 +37,16 @@ class AsistenciaFrame(ctk.CTkFrame):
         self.entry_fecha.insert(0, datetime.now().strftime("%Y-%m-%d"))
         self.entry_fecha.grid(row=2, column=1, padx=20, pady=5, sticky="w")
 
-        # 3. Entrada de Hora (Autocompletada)
-        self.lbl_hora = ctk.CTkLabel(self, text="Hora (HH:MM):", text_color="black")
+        # 3. Entrada de Hora (Bloqueada)
+        self.lbl_hora = ctk.CTkLabel(self, text="Hora de Registro:", text_color="black")
         self.lbl_hora.grid(row=3, column=0, padx=20, pady=5, sticky="e")
         
-        self.entry_hora = ctk.CTkEntry(self, width=200)
-        self.entry_hora.insert(0, datetime.now().strftime("%H:%M"))
+        # Usamos state="readonly" para que no se pueda escribir, pero el sistema pueda leerlo
+        self.entry_hora = ctk.CTkEntry(self, width=200, state="readonly")
         self.entry_hora.grid(row=3, column=1, padx=20, pady=5, sticky="w")
+        
+        # Función para actualizar la hora en tiempo real
+        self.actualizar_reloj()
 
         # 4. Combobox de Tipo de Registro
         self.lbl_tipo = ctk.CTkLabel(self, text="Acción:", text_color="black", font=("Helvetica", 12, "bold"))
@@ -84,3 +87,23 @@ class AsistenciaFrame(ctk.CTkFrame):
             self.entry_hora.insert(0, datetime.now().strftime("%H:%M"))
         else:
             self.lbl_mensaje.configure(text="Fallo de base de datos. Revisa los logs.", text_color="red")
+
+    def actualizar_reloj(self):
+        hora_actual = datetime.now().strftime("%H:%M:%S")
+        self.entry_hora.configure(state="normal")
+        self.entry_hora.delete(0, 'end')
+        self.entry_hora.insert(0, hora_actual)
+        self.entry_hora.configure(state="readonly")
+        self.after(1000, self.actualizar_reloj) # Actualiza cada segundo
+    
+    # def actualizar_reloj(self):
+    #     """Mantiene la hora actualizada cada segundo y la inyecta en el campo."""
+    #     hora_actual = datetime.now().strftime("%H:%M:%S")
+    #     self.entry_hora.configure(state="normal") # Desbloqueo temporal para escribir
+    #     self.entry_hora.delete(0, 'end')
+    #     self.entry_hora.insert(0, hora_actual)
+    #     self.entry_hora.configure(state="readonly") # Bloqueo permanente para el usuario
+    #     self.after(1000, self.actualizar_reloj) # Se llama a sí misma cada segundo
+    #     self.entry_hora = ctk.CTkEntry(self, width=200, state="readonly") # Bloqueado
+    #     self.entry_hora.grid(row=3, column=1, padx=20, pady=5, sticky="w")
+    #     self.actualizar_reloj()

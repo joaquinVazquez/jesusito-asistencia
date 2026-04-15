@@ -19,11 +19,13 @@ def inicializar_base_datos():
     """Crea las tablas del sistema si no existen."""
     
     # Tabla 1: Catálogo de Empleados
+    # Dentro de inicializar_base_datos(), actualiza la definición de la tabla empleados:
     sql_crear_empleados = """
     CREATE TABLE IF NOT EXISTS empleados (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT UNIQUE NOT NULL,
-        estatus TEXT DEFAULT 'Activo'
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT UNIQUE NOT NULL,
+    pago_hora REAL DEFAULT 0.0,
+    estatus TEXT DEFAULT 'Activo'
     );
     """
     
@@ -35,6 +37,15 @@ def inicializar_base_datos():
         fecha TEXT NOT NULL,
         hora TEXT NOT NULL,
         tipo_registro TEXT NOT NULL
+    );
+    """
+
+    sql_crear_empleados = """
+    CREATE TABLE IF NOT EXISTS empleados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT UNIQUE NOT NULL,
+        pago_hora REAL DEFAULT 0.0, -- Nuevo campo para el Excel
+        estatus TEXT DEFAULT 'Activo'
     );
     """
     

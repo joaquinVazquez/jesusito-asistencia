@@ -1,25 +1,31 @@
 import sqlite3
 from src.models.db_manager import crear_conexion
 
-def registrar_empleado(nombre):
+def registrar_empleado(nombre, pago_hora=0.0):
     """Registra un nuevo empleado validando duplicidad y limpiando el texto."""
-    nombre_limpio = nombre.strip().title() # Limpieza de datos
+    nombre_limpio = nombre.strip().title()
     
+    # Validamos que el pago sea un número
+    try:
+        pago_float = float(pago_hora)
+    except ValueError:
+        pago_float = 0.0
+
     conn = crear_conexion()
     if conn is not None:
         try:
             cursor = conn.cursor()
-            sql_insert = "INSERT INTO empleados (nombre) VALUES (?)"
-            cursor.execute(sql_insert, (nombre_limpio,))
+            # Inyectamos el nombre y el pago por hora
+            sql_insert = "INSERT INTO empleados (nombre, pago_hora) VALUES (?, ?)"
+            cursor.execute(sql_insert, (nombre_limpio, pago_float))
             conn.commit()
-            print(f"[ÉXITO] Empleado dado de alta: {nombre_limpio}")
+            print(f"[ÉXITO] Empleado {nombre_limpio} dado de alta con sueldo de ${pago_float}/hr")
             return True
         except sqlite3.IntegrityError:
-            # Esta excepción salta automáticamente gracias a la regla UNIQUE
             print(f"[ADVERTENCIA] El empleado '{nombre_limpio}' ya está registrado.")
             return False
         except sqlite3.Error as e:
-            print(f"[ERROR SQL] Fallo general de base de datos: {e}")
+            print(f"[ERROR SQL] Fallo general: {e}")
             return False
         finally:
             conn.close()

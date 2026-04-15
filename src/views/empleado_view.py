@@ -20,6 +20,10 @@ class EmpleadoFrame(ctk.CTkFrame):
         
         # 2. Campo de Texto (Input)
         self.entry_nombre = ctk.CTkEntry(self, placeholder_text="Ej. Pedro Mostrador", width=250)
+        self.entry_pago = ctk.CTkEntry(self, placeholder_text="Costo por Hora (ej. 62.5)", width=250)
+        self.entry_pago.pack(pady=10)
+        self.entry_pago = ctk.CTkEntry(self, placeholder_text="Costo por Hora (ej. 62.5)", width=250)
+        self.entry_pago.pack(pady=10)
         self.entry_nombre.pack(pady=10)
         
         # 3. Botón de Acción
@@ -37,12 +41,13 @@ class EmpleadoFrame(ctk.CTkFrame):
     def guardar_datos(self):
         """Captura el texto de la UI y lo envía al backend SQLite."""
         nombre = self.entry_nombre.get()
+        pago = self.entry_pago.get()
         
         if nombre.strip() == "":
             self.lbl_mensaje.configure(text="El nombre no puede estar vacío.", text_color="red")
             return
             
-        exito = registrar_empleado(nombre)
+        exito = registrar_empleado(nombre. pago)
         
         if exito:
             self.lbl_mensaje.configure(text=f"¡'{nombre}' registrado exitosamente!", text_color="green")

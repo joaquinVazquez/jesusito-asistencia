@@ -1,25 +1,25 @@
 import sqlite3
-# Importamos la conexión desde nuestro modelo
+from datetime import datetime
 from src.models.db_manager import crear_conexion
 
-def registrar_asistencia(nombre, fecha, hora, tipo_registro):
-    """Inserta de forma segura un nuevo registro en la base de datos."""
+def registrar_asistencia(empleado_nombre, fecha, hora_ui, tipo_registro):
+    """Registra la asistencia forzando la hora del sistema (Candado de Seguridad)."""
+    # SOBRESCRIBIMOS la hora de la interfaz con la hora exacta del servidor
+    hora_segura = datetime.now().strftime("%H:%M:%S")
+    
     conn = crear_conexion()
     if conn is not None:
         try:
             cursor = conn.cursor()
-            # Uso de '?' para sanitizar los inputs y prevenir inyección SQL
-            sql_insert = """
-            INSERT INTO asistencia (empleado_nombre, fecha, hora, tipo_registro)
-            VALUES (?, ?, ?, ?)
-            """
-            valores = (nombre, fecha, hora, tipo_registro)
-            cursor.execute(sql_insert, valores)
+            sql_insert = """INSERT INTO asistencia 
+                            (empleado_nombre, fecha, hora, tipo_registro) 
+                            VALUES (?, ?, ?, ?)"""
+            cursor.execute(sql_insert, (empleado_nombre, fecha, hora_segura, tipo_registro))
             conn.commit()
-            print(f"[ÉXITO] Registro guardado: {nombre} | {tipo_registro} | {hora}")
+            print(f"[ÉXITO] Asistencia de {empleado_nombre}: {tipo_registro} a las {hora_segura}")
             return True
         except sqlite3.Error as e:
-            print(f"[ERROR SQL] Fallo al insertar el registro: {e}")
+            print(f"[ERROR SQL] No se pudo guardar la asistencia: {e}")
             return False
         finally:
             conn.close()

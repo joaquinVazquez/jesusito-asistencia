@@ -26,7 +26,7 @@ class AsistenciaFrame(ctk.CTkFrame):
         if not empleados_activos:
             empleados_activos = ["Sin empleados registrados"]
             
-        self.cmb_empleado = ctk.CTkComboBox(self, values=empleados_activos, width=200)
+        self.cmb_empleado = ctk.CTkComboBox(self, values=empleados_activos, width=200, command=self.al_seleccionar_empleado)
         self.cmb_empleado.grid(row=1, column=1, padx=20, pady=5, sticky="w")
 
         # 2. Entrada de Fecha (Autocompletada)
@@ -121,3 +121,49 @@ class AsistenciaFrame(ctk.CTkFrame):
             self.cmb_empleado.set("")
         elif self.cmb_empleado.get() not in empleados_activos:
             self.cmb_empleado.set(empleados_activos[0])
+
+    
+    def al_seleccionar_empleado(self, nombre_seleccionado):
+        """Bloquea dinámicamente las opciones de Entrada/Salida según el historial."""
+        from src.controllers.asistencia_controller import obtener_ultimo_estado_hoy
+        
+        ultimo_estado = obtener_ultimo_estado_hoy(nombre_seleccionado)
+        
+        if ultimo_estado == "Entrada":
+            self.cmb_tipo.configure(values=["Salida"])
+            self.cmb_tipo.set("Salida")
+            mensaje = f"{nombre_seleccionado} tiene turno Activo. Siguiente acción: Salida."
+        else:
+            self.cmb_tipo.configure(values=["Entrada"])
+            self.cmb_tipo.set("Entrada")
+            mensaje = f"{nombre_seleccionado} está fuera. Siguiente acción: Entrada."
+            
+        # Candado de seguridad: Solo actualiza el texto si el widget ya cargó en memoria
+        if hasattr(self, 'lbl_status'):
+            self.lbl_status.configure(text=mensaje, text_color="blue")
+    
+    def guardar_registro(self):
+        empleado = self.cmb_empleado.get()
+        fecha = self.entry_fecha.get()
+        hora = self.entry_hora.get() # Será ignorada por el controlador por seguridad
+        tipo = self.cmb_tipo.get()
+
+        if not empleado or not fecha or not hora or not tipo:
+            self.lbl_status.configure(text="Error: Todos los campos son obligatorios", text_color="red")
+            return
+
+        from src.controllers.asistencia_controller import registrar_asistencia
+        
+        # Capturamos la tupla (estado, mensaje)
+        exito, mensaje = registrar_asistencia(empleado, fecha, hora, tipo)
+
+        if exito:
+            self.lbl_status.configure(text=f"Éxito: {tipo} de {empleado} registrada", text_color="green")
+            # Reseteamos el selector de tipo para el siguiente empleado
+            self.cmb_tipo.set("Entrada")
+            self.cmb_empleado.set("")
+        else:
+            from tkinter import messagebox
+            self.lbl_status.configure(text="Registro bloqueado", text_color="orange")
+            # Mostramos el motivo exacto del bloqueo en una ventana emergente
+            messagebox.showwarning("Advertencia de Seguridad", mensaje)

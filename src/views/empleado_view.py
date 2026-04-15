@@ -93,6 +93,11 @@ class EmpleadoFrame(ctk.CTkFrame):
                                          command=lambda i=emp_id: self.toggle_estatus(i, "Activo"))
                 btn_alta.pack(side="right", padx=5, pady=5)
 
+            # --- NUEVO BOTÓN DE HISTORIAL (Aparece para activos e inactivos) ---
+            btn_historial = ctk.CTkButton(row_frame, text="🕒 Historial", width=80, fg_color="#6c757d", hover_color="#5a6268", height=26,
+                                          command=lambda n=nombre: self.mostrar_historial(n))
+            btn_historial.pack(side="right", padx=5, pady=5)
+
     def cargar_edicion(self, emp_id, nombre, pago):
         """Prepara el formulario superior para modificar un registro existente."""
         self.empleado_en_edicion = emp_id
@@ -120,3 +125,47 @@ class EmpleadoFrame(ctk.CTkFrame):
         exito = cambiar_estatus(emp_id, nuevo_estatus)
         if exito:
             self.cargar_lista()
+
+    def mostrar_historial(self, nombre):
+        """Abre una ventana modal con el historial detallado del empleado."""
+        from src.controllers.asistencia_controller import obtener_historial_empleado
+        
+        # Construcción del Modal
+        modal = ctk.CTkToplevel(self)
+        modal.title(f"Auditoría de Asistencia: {nombre}")
+        modal.geometry("450x500")
+        modal.transient(self.winfo_toplevel()) # Mantiene la ventana siempre al frente
+        modal.grab_set() # Bloquea clics en la ventana principal hasta cerrar el modal
+        
+        lbl_titulo = ctk.CTkLabel(modal, text=f"Registros de {nombre}", font=("Helvetica", 16, "bold"), text_color=COLOR_PRIMARIO)
+        lbl_titulo.pack(pady=15)
+        
+        # Contenedor desplazable para los datos
+        scroll_historial = ctk.CTkScrollableFrame(modal, fg_color="transparent")
+        scroll_historial.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+        
+        registros = obtener_historial_empleado(nombre)
+        
+        if not registros:
+            ctk.CTkLabel(scroll_historial, text="No hay movimientos registrados.", text_color="gray").pack(pady=20)
+            return
+
+        # Encabezados de tabla
+        header_frame = ctk.CTkFrame(scroll_historial, fg_color=COLOR_PRIMARIO, corner_radius=0)
+        header_frame.pack(fill="x", pady=(0, 5))
+        ctk.CTkLabel(header_frame, text="Fecha", width=110, text_color="white", font=("Helvetica", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(header_frame, text="Hora", width=110, text_color="white", font=("Helvetica", 12, "bold")).pack(side="left", padx=5)
+        ctk.CTkLabel(header_frame, text="Movimiento", width=110, text_color="white", font=("Helvetica", 12, "bold")).pack(side="left", padx=5)
+
+        # Iteración de registros
+        for i, (fecha, hora, tipo) in enumerate(registros):
+            bg_color = "white" if i % 2 == 0 else "#F9F9F9"
+            row = ctk.CTkFrame(scroll_historial, fg_color=bg_color, height=30, corner_radius=0)
+            row.pack(fill="x", pady=1)
+            
+            # Código de color para identificación visual rápida
+            color_tipo = "#28a745" if tipo == "Entrada" else "#dc3545"
+            
+            ctk.CTkLabel(row, text=fecha, width=110, text_color="black").pack(side="left", padx=5)
+            ctk.CTkLabel(row, text=hora, width=110, text_color="black").pack(side="left", padx=5)
+            ctk.CTkLabel(row, text=tipo, width=110, text_color=color_tipo, font=("Helvetica", 11, "bold")).pack(side="left", padx=5)

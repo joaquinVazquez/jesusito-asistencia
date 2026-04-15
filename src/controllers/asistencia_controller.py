@@ -3,27 +3,91 @@ from datetime import datetime
 from src.models.db_manager import crear_conexion
 
 def registrar_asistencia(empleado_nombre, fecha, hora_ui, tipo_registro):
-    """Registra la asistencia forzando la hora del sistema (Candado de Seguridad)."""
-    # SOBRESCRIBIMOS la hora de la interfaz con la hora exacta del servidor
+    """
+    Registra la asistencia validando que no existan movimientos duplicados consecutivos.
+    Retorna: (bool_exito, str_mensaje)
+    """
     hora_segura = datetime.now().strftime("%H:%M:%S")
     
     conn = crear_conexion()
-    if conn is not None:
-        try:
-            cursor = conn.cursor()
-            sql_insert = """INSERT INTO asistencia 
-                            (empleado_nombre, fecha, hora, tipo_registro) 
-                            VALUES (?, ?, ?, ?)"""
-            cursor.execute(sql_insert, (empleado_nombre, fecha, hora_segura, tipo_registro))
-            conn.commit()
-            print(f"[ÉXITO] Asistencia de {empleado_nombre}: {tipo_registro} a las {hora_segura}")
-            return True
-        except sqlite3.Error as e:
-            print(f"[ERROR SQL] No se pudo guardar la asistencia: {e}")
-            return False
-        finally:
-            conn.close()
-    return False
+    if conn is None:
+        return False, "Error de conexión a la base de datos."
+        
+    try:
+        cursor = conn.cursor()
+        
+        # 1. Validación Anti-Duplicidad
+        cursor.execute("""
+            SELECT tipo_registro FROM asistencia 
+            WHERE empleado_nombre = ? AND fecha = ? 
+            ORDER BY hora DESC LIMIT 1
+        """, (empleado_nombre, fecha))
+        
+        ultimo_registro = cursor.fetchone()
+        
+        if ultimo_registro:
+            ultimo_tipo = ultimo_registro[0]
+            if ultimo_tipo == tipo_registro:
+                # Personalización del mensaje según el tipo de registro
+                if tipo_registro == "Entrada":
+                    return False, f"El empleado {empleado_nombre} ya ha sido registrado con Entrada el día de hoy."
+                else:
+                    return False, f"El empleado {empleado_nombre} ya ha registrado su Salida previamente."
+        else:
+            # Si no hay registros previos en el día, el primero DEBE ser Entrada
+            if tipo_registro == "Salida":
+                return False, "Operación denegada. No se puede registrar 'Salida' sin una 'Entrada' previa."
+
+        # 2. Inserción si pasa la validación
+        sql_insert = "INSERT INTO asistencia (empleado_nombre, fecha, hora, tipo_registro) VALUES (?, ?, ?, ?)"
+        cursor.execute(sql_insert, (empleado_nombre, fecha, hora_segura, tipo_registro))
+        conn.commit()
+        
+        return True, "Registro guardado correctamente."
+        
+    except sqlite3.Error as e:
+        return False, f"Error interno SQL: {e}"
+    finally:
+        conn.close()
+
+def obtener_ultimo_estado_hoy(empleado_nombre):
+    """Devuelve 'Entrada', 'Salida' o None para el día actual."""
+    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+    conn = crear_conexion()
+    if not conn: return None
+    
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT tipo_registro FROM asistencia 
+            WHERE empleado_nombre = ? AND fecha = ? 
+            ORDER BY hora DESC LIMIT 1
+        """, (empleado_nombre, fecha_hoy))
+        
+        resultado = cursor.fetchone()
+        return resultado[0] if resultado else None
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+
+def obtener_historial_empleado(empleado_nombre):
+    """Recupera todos los registros de un empleado ordenados de forma descendente."""
+    conn = crear_conexion()
+    if not conn: return []
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT fecha, hora, tipo_registro 
+            FROM asistencia 
+            WHERE empleado_nombre = ? 
+            ORDER BY fecha DESC, hora DESC
+        """, (empleado_nombre,))
+        return cursor.fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        conn.close()
 
 if __name__ == "__main__":
     # Prueba de humo simulando un turno de la pastelería

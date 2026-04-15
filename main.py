@@ -58,45 +58,36 @@ class SistemaAsistencia(ctk.CTk):
             messagebox.showerror("Error", "PIN Incorrecto")
 
     def abrir_sesion_admin(self):
-        print("\n[DEBUG] --- Iniciando apertura de sesión Admin ---")
-        
+        # 1. Importaciones obligatorias para el modo Admin
         from src.views.empleado_view import EmpleadoFrame
         from src.views.gerencial_view import GerencialFrame
         from src.views.report_view import ReportView 
         
+        # 2. OCULTAMOS el panel de asistencia para dar espacio a la administración
+        self.panel_asistencia.pack_forget()
+        
         self.btn_admin.configure(text="🔓 Salir Admin", fg_color=COLOR_PRIMARIO)
         
-        # 1. Inyectamos panel empleados
-        print("[DEBUG] Empaquetando EmpleadoFrame...")
+        # 3. Inyectamos paneles en orden jerárquico
         self.panel_empleados = EmpleadoFrame(self.scroll_container)
-        self.panel_empleados.pack(pady=10, padx=40, fill="x", before=self.panel_asistencia)
+        self.panel_empleados.pack(pady=10, padx=40, fill="x")
         
-        # 2. Inyectamos panel de reporte (nómina)
-        print("[DEBUG] Empaquetando ReportView...")
         self.panel_reporte = ReportView(self.scroll_container)
         self.panel_reporte.pack(pady=10, padx=40, fill="x")
         
-        # 3. Inyectamos panel gerencial
-        print("[DEBUG] Empaquetando GerencialFrame...")
         self.panel_gerencial = GerencialFrame(self.scroll_container)
         self.panel_gerencial.pack(pady=10, padx=40, fill="x")
-        
-        print("[DEBUG] --- Paneles cargados con éxito ---")
 
     def cerrar_sesion_admin(self):
         self.btn_admin.configure(text="🔒 Modo Admin", fg_color="gray")
         
-        if self.panel_empleados:
-            self.panel_empleados.destroy()
-            self.panel_empleados = None
-            
-        if self.panel_reporte:
-            self.panel_reporte.destroy()
-            self.panel_reporte = None
-            
-        if self.panel_gerencial:
-            self.panel_gerencial.destroy()
-            self.panel_gerencial = None
+        # Destruimos paneles administrativos
+        if self.panel_empleados: self.panel_empleados.destroy()
+        if self.panel_reporte: self.panel_reporte.destroy()
+        if self.panel_gerencial: self.panel_gerencial.destroy()
+        
+        # RESTAURAMOS el panel de asistencia para el uso público
+        self.panel_asistencia.pack(pady=10, padx=40, fill="x")
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("light")

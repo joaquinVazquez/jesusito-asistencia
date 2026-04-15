@@ -86,7 +86,9 @@ class SistemaAsistencia(ctk.CTk):
         if self.panel_reporte: self.panel_reporte.destroy()
         if self.panel_gerencial: self.panel_gerencial.destroy()
         
+        
         # RESTAURAMOS el panel de asistencia para el uso público
+        self.panel_asistencia.actualizar_lista_empleados()
         self.panel_asistencia.pack(pady=10, padx=40, fill="x")
 
 if __name__ == "__main__":

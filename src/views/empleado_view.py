@@ -1,56 +1,122 @@
 import customtkinter as ctk
+from tkinter import messagebox
 import os
 import sys
 
-# Apuntamos a la raíz para importar la configuración y controladores
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(BASE_DIR)
 
-from config.theme import COLOR_PRIMARIO, COLOR_SECUNDARIO
-from src.controllers.empleado_controller import registrar_empleado
+from src.controllers.empleado_controller import (
+    registrar_empleado, actualizar_empleado, 
+    cambiar_estatus, obtener_empleados_gestion
+)
+from config.theme import COLOR_PRIMARIO
 
 class EmpleadoFrame(ctk.CTkFrame):
     def __init__(self, master):
-        # Creamos la caja con fondo blanco y bordes redondeados para que resalte
         super().__init__(master, fg_color="white", corner_radius=10)
         
-        # 1. Título del Panel
-        self.lbl_titulo = ctk.CTkLabel(self, text="Alta de Nuevo Empleado", font=("Helvetica", 16, "bold"), text_color=COLOR_PRIMARIO)
-        self.lbl_titulo.pack(pady=(15, 5))
+        self.empleado_en_edicion = None # Variable pivote para saber si estamos creando o editando
+
+        self.lbl_titulo = ctk.CTkLabel(self, text="Gestor de Personal", font=("Helvetica", 16, "bold"), text_color=COLOR_PRIMARIO)
+        self.lbl_titulo.pack(pady=(10, 5))
+
+        # --- ZONA 1: FORMULARIO ---
+        self.form_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.form_frame.pack(fill="x", padx=20, pady=5)
+
+        self.entry_nombre = ctk.CTkEntry(self.form_frame, placeholder_text="Nombre del Empleado", width=220)
+        self.entry_nombre.pack(side="left", padx=5)
+
+        self.entry_pago = ctk.CTkEntry(self.form_frame, placeholder_text="Sueldo/Hr (ej. 25)", width=130)
+        self.entry_pago.pack(side="left", padx=5)
+
+        self.btn_guardar = ctk.CTkButton(self.form_frame, text="Agregar Nuevo", width=120, fg_color=COLOR_PRIMARIO, command=self.guardar_datos)
+        self.btn_guardar.pack(side="left", padx=5)
+
+        self.btn_cancelar = ctk.CTkButton(self.form_frame, text="Cancelar", width=80, fg_color="gray", command=self.limpiar_formulario)
+        # El botón cancelar no se empaqueta aún, solo aparece si estamos editando
         
-        # 2. Campo de Texto (Input)
-        self.entry_nombre = ctk.CTkEntry(self, placeholder_text="Ej. Pedro Mostrador", width=250)
-        self.entry_pago = ctk.CTkEntry(self, placeholder_text="Costo por Hora (ej. 62.5)", width=250)
-        self.entry_pago.pack(pady=10)
-        self.entry_pago = ctk.CTkEntry(self, placeholder_text="Costo por Hora (ej. 62.5)", width=250)
-        self.entry_pago.pack(pady=10)
-        self.entry_nombre.pack(pady=10)
-        
-        # 3. Botón de Acción
-        self.btn_guardar = ctk.CTkButton(
-            self, text="Registrar", 
-            fg_color=COLOR_PRIMARIO, hover_color=COLOR_SECUNDARIO, 
-            command=self.guardar_datos
-        )
-        self.btn_guardar.pack(pady=10)
-        
-        # 4. Etiqueta de Respuesta (UX)
-        self.lbl_mensaje = ctk.CTkLabel(self, text="", font=("Helvetica", 12))
-        self.lbl_mensaje.pack(pady=(0, 10))
+        # --- ZONA 2: LISTA DE EMPLEADOS ---
+        self.lista_frame = ctk.CTkScrollableFrame(self, height=180, fg_color="#F2F2F2")
+        self.lista_frame.pack(fill="both", expand=True, padx=20, pady=(10, 15))
+
+        self.cargar_lista()
 
     def guardar_datos(self):
-        """Captura el texto de la UI y lo envía al backend SQLite."""
-        nombre = self.entry_nombre.get()
-        pago = self.entry_pago.get()
-        
-        if nombre.strip() == "":
-            self.lbl_mensaje.configure(text="El nombre no puede estar vacío.", text_color="red")
+        nombre = self.entry_nombre.get().strip()
+        pago = self.entry_pago.get().strip()
+
+        if not nombre or not pago:
+            messagebox.showwarning("Campos Vacíos", "Ingresa el nombre y el costo por hora.")
             return
-            
-        exito = registrar_empleado(nombre. pago)
-        
-        if exito:
-            self.lbl_mensaje.configure(text=f"¡'{nombre}' registrado exitosamente!", text_color="green")
-            self.entry_nombre.delete(0, 'end') # Limpia el campo para el siguiente
+
+        if self.empleado_en_edicion is None:
+            exito = registrar_empleado(nombre, pago)
         else:
-            self.lbl_mensaje.configure(text="El empleado ya existe o hubo un error.", text_color="red")
+            exito = actualizar_empleado(self.empleado_en_edicion, nombre, pago)
+
+        if exito:
+            self.limpiar_formulario()
+            self.cargar_lista()
+        else:
+            messagebox.showerror("Error de Integridad", "Fallo al guardar. Verifica que el nombre no esté duplicado.")
+
+    def cargar_lista(self):
+        # 1. Limpiamos la lista actual
+        for widget in self.lista_frame.winfo_children():
+            widget.destroy()
+
+        # 2. Obtenemos datos frescos de SQLite
+        empleados = obtener_empleados_gestion()
+        
+        # 3. Dibujamos las filas
+        for emp_id, nombre, pago, estatus in empleados:
+            row_frame = ctk.CTkFrame(self.lista_frame, fg_color="white", corner_radius=5)
+            row_frame.pack(fill="x", pady=2, padx=5)
+            
+            color_texto = "black" if estatus == "Activo" else "gray"
+            lbl_info = ctk.CTkLabel(row_frame, text=f"{nombre}  |  ${pago:.2f}/hr  |  {estatus}", text_color=color_texto, font=("Helvetica", 12))
+            lbl_info.pack(side="left", padx=15, pady=5)
+
+            # Botones dinámicos según el estatus
+            if estatus == "Activo":
+                btn_baja = ctk.CTkButton(row_frame, text="Dar de Baja", width=80, fg_color="#dc3545", hover_color="#c82333", height=26,
+                                         command=lambda i=emp_id: self.toggle_estatus(i, "Inactivo"))
+                btn_baja.pack(side="right", padx=5, pady=5)
+                
+                btn_editar = ctk.CTkButton(row_frame, text="✏️ Editar", width=70, fg_color="#17a2b8", hover_color="#138496", height=26,
+                                           command=lambda i=emp_id, n=nombre, p=pago: self.cargar_edicion(i, n, p))
+                btn_editar.pack(side="right", padx=5, pady=5)
+            else:
+                btn_alta = ctk.CTkButton(row_frame, text="Reactivar", width=80, fg_color="#28a745", hover_color="#218838", height=26,
+                                         command=lambda i=emp_id: self.toggle_estatus(i, "Activo"))
+                btn_alta.pack(side="right", padx=5, pady=5)
+
+    def cargar_edicion(self, emp_id, nombre, pago):
+        """Prepara el formulario superior para modificar un registro existente."""
+        self.empleado_en_edicion = emp_id
+        
+        self.entry_nombre.delete(0, 'end')
+        self.entry_nombre.insert(0, nombre)
+        
+        self.entry_pago.delete(0, 'end')
+        self.entry_pago.insert(0, str(pago))
+        
+        # Transformación visual del botón principal
+        self.btn_guardar.configure(text="💾 Guardar Cambios", fg_color="#ffc107", text_color="black", hover_color="#e0a800")
+        self.btn_cancelar.pack(side="left", padx=5)
+
+    def limpiar_formulario(self):
+        """Restaura el formulario a su estado original (Alta de nuevo empleado)."""
+        self.empleado_en_edicion = None
+        self.entry_nombre.delete(0, 'end')
+        self.entry_pago.delete(0, 'end')
+        
+        self.btn_guardar.configure(text="Agregar Nuevo", fg_color=COLOR_PRIMARIO, text_color="white", hover_color="#155B96")
+        self.btn_cancelar.pack_forget()
+
+    def toggle_estatus(self, emp_id, nuevo_estatus):
+        exito = cambiar_estatus(emp_id, nuevo_estatus)
+        if exito:
+            self.cargar_lista()

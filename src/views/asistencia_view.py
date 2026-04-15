@@ -107,3 +107,17 @@ class AsistenciaFrame(ctk.CTkFrame):
     #     self.entry_hora = ctk.CTkEntry(self, width=200, state="readonly") # Bloqueado
     #     self.entry_hora.grid(row=3, column=1, padx=20, pady=5, sticky="w")
     #     self.actualizar_reloj()
+
+    def actualizar_lista_empleados(self):
+        """Consulta la base de datos y refresca el ComboBox."""
+        from src.controllers.empleado_controller import obtener_empleados_activos
+        empleados_activos = obtener_empleados_activos()
+        
+        # Actualizamos los valores del ComboBox
+        self.cmb_empleado.configure(values=empleados_activos)
+        
+        # Si la lista está vacía, limpiamos el texto actual
+        if not empleados_activos:
+            self.cmb_empleado.set("")
+        elif self.cmb_empleado.get() not in empleados_activos:
+            self.cmb_empleado.set(empleados_activos[0])

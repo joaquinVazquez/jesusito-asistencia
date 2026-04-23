@@ -8,7 +8,7 @@ sys.path.append(BASE_DIR)
 
 from config.theme import COLOR_PRIMARIO, COLOR_FONDO
 
-# Clave de acceso administrativa
+# Clave de acceso administrativa (Se usará si no hay una en BD)
 PIN_ADMIN = "1234"
 
 class SistemaAsistencia(ctk.CTk):
@@ -34,6 +34,7 @@ class SistemaAsistencia(ctk.CTk):
         self.btn_admin.pack(side="right", padx=40)
 
         # 3. Módulo de Asistencia (PÚBLICO - Siempre visible)
+        # CORRECCIÓN: Se agrega el prefijo src.views para localizar el archivo
         from src.views.asistencia_view import AsistenciaFrame
         self.panel_asistencia = AsistenciaFrame(self.scroll_container)
         self.panel_asistencia.pack(pady=10, padx=40, fill="x")
@@ -44,31 +45,49 @@ class SistemaAsistencia(ctk.CTk):
         self.panel_gerencial = None
 
     def verificar_admin(self):
-        if self.panel_empleados:
+        # Si alguno de los paneles administrativos existe, significa que queremos SALIR
+        if self.panel_empleados is not None or self.panel_reporte is not None:
             self.cerrar_sesion_admin()
             return
 
-        dialogo = ctk.CTkInputDialog(text="Ingrese el PIN de Administradora:", title="Seguridad")
-        password = dialogo.get_input()
+        # Si no, procedemos a pedir el PIN dinámico
+        from src.models.db_manager import crear_conexion
+        pin_real = PIN_ADMIN 
+        
+        conn = crear_conexion()
+        if conn:
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT valor FROM config WHERE parametro = 'pin_admin'")
+                resultado = cursor.fetchone()
+                if resultado: pin_real = resultado[0]
+            except: pass
+            finally: conn.close()
 
-        if password == PIN_ADMIN:
+        dialogo = ctk.CTkInputDialog(text="Ingrese el PIN de Administradora:", title="Seguridad")
+        try:
+            password = dialogo.get_input()
+        except:
+            password = None
+
+        if password == pin_real:
             self.abrir_sesion_admin()
         elif password is not None:
             from tkinter import messagebox
             messagebox.showerror("Error", "PIN Incorrecto")
 
     def abrir_sesion_admin(self):
-        # 1. Importaciones obligatorias para el modo Admin
+        # 1. Importaciones con rutas absolutas
         from src.views.empleado_view import EmpleadoFrame
         from src.views.gerencial_view import GerencialFrame
         from src.views.report_view import ReportView 
         
-        # 2. OCULTAMOS el panel de asistencia para dar espacio a la administración
+        # 2. OCULTAMOS el panel de asistencia
         self.panel_asistencia.pack_forget()
         
         self.btn_admin.configure(text="🔓 Salir Admin", fg_color=COLOR_PRIMARIO)
         
-        # 3. Inyectamos paneles en orden jerárquico
+        # 3. Inyectamos paneles administrativos
         self.panel_empleados = EmpleadoFrame(self.scroll_container)
         self.panel_empleados.pack(pady=10, padx=40, fill="x")
         
@@ -79,19 +98,33 @@ class SistemaAsistencia(ctk.CTk):
         self.panel_gerencial.pack(pady=10, padx=40, fill="x")
 
     def cerrar_sesion_admin(self):
+        print("[DEBUG] Cerrando sesión y limpiando estados...")
         self.btn_admin.configure(text="🔒 Modo Admin", fg_color="gray")
         
-        # Destruimos paneles administrativos
-        if self.panel_empleados: self.panel_empleados.destroy()
-        if self.panel_reporte: self.panel_reporte.destroy()
-        if self.panel_gerencial: self.panel_gerencial.destroy()
+        # Destrucción física y limpieza de referencias
+        if self.panel_empleados:
+            self.panel_empleados.destroy()
+            self.panel_empleados = None
+            
+        if self.panel_reporte:
+            self.panel_reporte.destroy()
+            self.panel_reporte = None
+            
+        if self.panel_gerencial:
+            self.panel_gerencial.destroy()
+            self.panel_gerencial = None
         
-        
-        # RESTAURAMOS el panel de asistencia para el uso público
+        # Refrescar y restaurar panel operativo
         self.panel_asistencia.actualizar_lista_empleados()
         self.panel_asistencia.pack(pady=10, padx=40, fill="x")
 
 if __name__ == "__main__":
-    ctk.set_appearance_mode("light")
-    app = SistemaAsistencia()
+    from src.models.db_manager import inicializar_base_de_datos
+    
+    # 1. Verificamos o creamos la base de datos
+    inicializar_base_de_datos()
+    
+    # 2. Arrancamos la interfaz gráfica
+    # CORRECCIÓN: No se debe pasar ctk.CTk como argumento
+    app = SistemaAsistencia() 
     app.mainloop()

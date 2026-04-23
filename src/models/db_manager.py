@@ -1,70 +1,62 @@
 import sqlite3
 import os
+import sys
 
-# 1. Calculamos la ruta absoluta hacia la carpeta 'data'
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DB_PATH = os.path.join(BASE_DIR, "data", "jesusito_asistencia.db")
+def obtener_ruta_db():
+    if getattr(sys, 'frozen', False):
+        # Si es .exe, la carpeta data estará junto al .exe
+        base_path = os.path.dirname(sys.executable)
+    else:
+        # En desarrollo
+        base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
+    ruta_data = os.path.join(base_path, "data")
+    if not os.path.exists(ruta_data):
+        try:
+            os.makedirs(ruta_data)
+        except:
+            # Si falla (por permisos en C:), lo crea en el Escritorio del usuario como fallback
+            ruta_data = os.path.join(os.path.expanduser("~"), "Desktop", "Jesusito_Data")
+            if not os.path.exists(ruta_data): os.makedirs(ruta_data)
+
+    return os.path.join(ruta_data, "jesusito_asistencia.db")
 
 def crear_conexion():
-    """Genera y retorna la conexión a la base de datos SQLite."""
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        return conn
-    except sqlite3.Error as e:
-        print(f"[ERROR CRÍTICO] Fallo de conexión a la BD: {e}")
+    db_path = obtener_ruta_db()
+    conn = sqlite3.connect(db_path)
     return conn
 
-def inicializar_base_datos():
-    """Crea las tablas del sistema si no existen."""
-    
-    # Tabla 1: Catálogo de Empleados
-    # Dentro de inicializar_base_datos(), actualiza la definición de la tabla empleados:
-    sql_crear_empleados = """
-    CREATE TABLE IF NOT EXISTS empleados (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nombre TEXT UNIQUE NOT NULL,
-    pago_hora REAL DEFAULT 0.0,
-    estatus TEXT DEFAULT 'Activo'
-    );
-    """
-    
-    # Tabla 2: Registro de Asistencias
-    sql_crear_asistencia = """
-    CREATE TABLE IF NOT EXISTS asistencia (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        empleado_nombre TEXT NOT NULL,
-        fecha TEXT NOT NULL,
-        hora TEXT NOT NULL,
-        tipo_registro TEXT NOT NULL
-    );
-    """
-
-    sql_crear_empleados = """
-    CREATE TABLE IF NOT EXISTS empleados (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT UNIQUE NOT NULL,
-        pago_hora REAL DEFAULT 0.0, -- Nuevo campo para el Excel
-        estatus TEXT DEFAULT 'Activo'
-    );
-    """
-    
+def inicializar_base_de_datos():
+    """Crea las tablas desde cero si no existen."""
     conn = crear_conexion()
-    if conn is not None:
-        try:
-            cursor = conn.cursor()
-            # Ejecutamos la creación de ambas tablas
-            cursor.execute(sql_crear_empleados)
-            cursor.execute(sql_crear_asistencia)
-            conn.commit()
-            print(f"[SISTEMA] Motor de base de datos actualizado en: {DB_PATH}")
-        except sqlite3.Error as e:
-            print(f"[ERROR SQL] Fallo al estructurar tablas: {e}")
-        finally:
-            conn.close()
-    else:
-        print("[SISTEMA] Abortando inicialización por falta de conexión.")
-
-if __name__ == "__main__":
-    # Esto solo se ejecuta si corremos este archivo directamente para probar
-    inicializar_base_datos()
+    cursor = conn.cursor()
+    
+    # Tabla Empleados
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS empleados (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nombre TEXT UNIQUE NOT NULL,
+            pago_hora REAL DEFAULT 0.0,
+            estatus TEXT DEFAULT 'Activo'
+        )
+    """)
+    
+    # Tabla Asistencia
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS asistencia (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empleado_nombre TEXT,
+            fecha TEXT,
+            hora TEXT,
+            tipo_registro TEXT,
+            FOREIGN KEY(empleado_nombre) REFERENCES empleados(nombre)
+        )
+    """)
+    
+    # Tabla Configuración (PIN)
+    cursor.execute("CREATE TABLE IF NOT EXISTS config (parametro TEXT PRIMARY KEY, valor TEXT)")
+    cursor.execute("INSERT OR IGNORE INTO config (parametro, valor) VALUES ('pin_admin', '1234')")
+    
+    conn.commit()
+    conn.close()
+    print("[SISTEMA] Base de datos verificada/creada con éxito.")

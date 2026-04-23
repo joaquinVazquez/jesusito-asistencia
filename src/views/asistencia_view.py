@@ -124,10 +124,13 @@ class AsistenciaFrame(ctk.CTkFrame):
 
     
     def al_seleccionar_empleado(self, nombre_seleccionado):
-        """Bloquea dinámicamente las opciones de Entrada/Salida según el historial."""
-        from src.controllers.asistencia_controller import obtener_ultimo_estado_hoy
+        """Bloquea dinámicamente las opciones usando la fecha de la pantalla."""
+        from src.controllers.asistencia_controller import obtener_ultimo_estado_dia
         
-        ultimo_estado = obtener_ultimo_estado_hoy(nombre_seleccionado)
+        # OBTENEMOS LA FECHA DIRECTO DEL WIDGET (Sincronización total)
+        fecha_actual = self.entry_fecha.get()
+        
+        ultimo_estado = obtener_ultimo_estado_dia(nombre_seleccionado, fecha_actual)
         
         if ultimo_estado == "Entrada":
             self.cmb_tipo.configure(values=["Salida"])
@@ -138,7 +141,6 @@ class AsistenciaFrame(ctk.CTkFrame):
             self.cmb_tipo.set("Entrada")
             mensaje = f"{nombre_seleccionado} está fuera. Siguiente acción: Entrada."
             
-        # Candado de seguridad: Solo actualiza el texto si el widget ya cargó en memoria
         if hasattr(self, 'lbl_status'):
             self.lbl_status.configure(text=mensaje, text_color="blue")
     
@@ -162,6 +164,7 @@ class AsistenciaFrame(ctk.CTkFrame):
             # Reseteamos el selector de tipo para el siguiente empleado
             self.cmb_tipo.set("Entrada")
             self.cmb_empleado.set("")
+            self.al_seleccionar_empleado(empleado)
         else:
             from tkinter import messagebox
             self.lbl_status.configure(text="Registro bloqueado", text_color="orange")

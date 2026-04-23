@@ -9,6 +9,8 @@ __pycache__/
 # Bases de datos y Respaldos (No rastrear datos reales de la pastelería)
 data/
 backups/
+data/*.db
+data/*.sqlite3
 
 # Logs de errores
 logs/
@@ -16,3 +18,11 @@ logs/
 # Archivos de sistema operativo
 .DS_Store
 Thumbs.db
+
+# Archivos de PyInstaller (Ejecutables)
+build/
+dist/
+*.spec
+
+# Variables de entorno y configuraciones locales
+.env

@@ -50,23 +50,24 @@ def registrar_asistencia(empleado_nombre, fecha, hora_ui, tipo_registro):
     finally:
         conn.close()
 
-def obtener_ultimo_estado_hoy(empleado_nombre):
-    """Devuelve 'Entrada', 'Salida' o None para el día actual."""
-    fecha_hoy = datetime.now().strftime("%Y-%m-%d")
+def obtener_ultimo_estado_dia(empleado_nombre, fecha_consulta):
+    """Consulta el último movimiento de un empleado en una fecha específica."""
+    from src.models.db_manager import crear_conexion
     conn = crear_conexion()
     if not conn: return None
     
     try:
         cursor = conn.cursor()
+        # Buscamos el último registro basado en la fecha exacta que se ve en la UI
         cursor.execute("""
             SELECT tipo_registro FROM asistencia 
             WHERE empleado_nombre = ? AND fecha = ? 
             ORDER BY hora DESC LIMIT 1
-        """, (empleado_nombre, fecha_hoy))
+        """, (empleado_nombre, fecha_consulta))
         
         resultado = cursor.fetchone()
         return resultado[0] if resultado else None
-    except sqlite3.Error:
+    except:
         return None
     finally:
         conn.close()

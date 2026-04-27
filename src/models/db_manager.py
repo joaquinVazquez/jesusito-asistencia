@@ -30,18 +30,42 @@ def inicializar_base_de_datos():
     conn = crear_conexion()
     cursor = conn.cursor()
     
-    # 1. Tabla Empleados (Configuración base por persona)
+    # 1. Creación base de Empleados (Solo lo esencial)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS empleados (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT UNIQUE NOT NULL,
-            pago_hora REAL DEFAULT 0.0,
-            jornada_base INTEGER DEFAULT 8, 
-            estatus TEXT DEFAULT 'Activo'
+            nombre TEXT UNIQUE NOT NULL
         )
     """)
     
-    # 2. Tabla Asistencia (Con rastro de sucursal)
+    # --- MOTOR DE AUTO-MIGRACIÓN PARA EMPLEADOS ---
+    columnas_requeridas = {
+        "telefono": "TEXT DEFAULT 'Sin registro'",
+        "rol": "TEXT DEFAULT 'General'",
+        "direccion": "TEXT DEFAULT 'Sin registro'",
+        "fecha_nacimiento": "TEXT DEFAULT ''",
+        "fecha_ingreso": "TEXT DEFAULT ''",
+        "expediente": "TEXT DEFAULT ''",
+        "pago_hora": "REAL DEFAULT 0.0",
+        "jornada_base": "INTEGER DEFAULT 8",
+        "estatus": "TEXT DEFAULT 'Activo'"
+    }
+    
+    # Obtenemos las columnas que realmente existen en el archivo .db
+    cursor.execute("PRAGMA table_info(empleados)")
+    columnas_actuales = [row[1] for row in cursor.fetchall()]
+    
+    # Inyectamos automáticamente las que falten
+    for col, definicion in columnas_requeridas.items():
+        if col not in columnas_actuales:
+            try:
+                cursor.execute(f"ALTER TABLE empleados ADD COLUMN {col} {definicion}")
+                print(f"[SISTEMA] Columna faltante agregada: {col}")
+            except Exception as e:
+                print(f"[ERROR] No se pudo agregar {col}: {e}")
+    # ----------------------------------------------
+
+    # 2. Tabla Asistencia
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS asistencia (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,23 +78,23 @@ def inicializar_base_de_datos():
         )
     """)
     
-    # 3. TABLA DE AJUSTES (Aquí es donde la configuración es dinámica)
+    # 3. Tabla Ajustes
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS ajustes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             empleado_nombre TEXT,
             fecha TEXT,
             monto REAL,
-            tipo TEXT, -- 'Bono' o 'Descuento'
+            tipo TEXT,
             motivo TEXT,
             FOREIGN KEY(empleado_nombre) REFERENCES empleados(nombre)
         )
     """)
     
-    # Configuración de seguridad
+    # 4. Tabla Configuración
     cursor.execute("CREATE TABLE IF NOT EXISTS config (parametro TEXT PRIMARY KEY, valor TEXT)")
     cursor.execute("INSERT OR IGNORE INTO config (parametro, valor) VALUES ('pin_admin', '1234')")
     
     conn.commit()
     conn.close()
-    print("[SISTEMA] Tablas de la V1.1 inicializadas.")
+    print("[SISTEMA] Base de datos verificada y auto-migrada con éxito.")

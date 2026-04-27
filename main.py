@@ -11,6 +11,37 @@ from config.theme import COLOR_PRIMARIO, COLOR_FONDO
 # Clave de acceso administrativa (Se usará si no hay una en BD)
 PIN_ADMIN = "1234"
 
+class DialogoPIN(ctk.CTkToplevel):
+    def __init__(self, master):
+        super().__init__(master)
+        self.title("Seguridad")
+        self.geometry("300x170")
+        self.resizable(False, False)
+        self.password = None
+        
+        # Centrar ventana
+        self.update_idletasks()
+        x = master.winfo_x() + (master.winfo_width() // 2) - 150
+        y = master.winfo_y() + (master.winfo_height() // 2) - 85
+        self.geometry(f"+{x}+{y}")
+
+        ctk.CTkLabel(self, text="Ingrese PIN de Administradora:", font=("Helvetica", 14, "bold")).pack(pady=(20, 10))
+        
+        # El parámetro show="*" es la clave de la seguridad visual
+        self.ent_pin = ctk.CTkEntry(self, show="*", justify="center", width=150)
+        self.ent_pin.pack(pady=5)
+        self.ent_pin.bind("<Return>", self.enviar)
+        
+        ctk.CTkButton(self, text="Entrar", fg_color=COLOR_PRIMARIO, command=self.enviar).pack(pady=15)
+        
+        self.ent_pin.focus() # Pone el cursor automáticamente
+        self.grab_set()      # Bloquea la ventana principal hasta que se cierre esta
+        self.wait_window()
+
+    def enviar(self, event=None):
+        self.password = self.ent_pin.get()
+        self.destroy()
+
 class SistemaAsistencia(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -45,12 +76,10 @@ class SistemaAsistencia(ctk.CTk):
         self.panel_gerencial = None
 
     def verificar_admin(self):
-        # Si alguno de los paneles administrativos existe, significa que queremos SALIR
         if self.panel_empleados is not None or self.panel_reporte is not None:
             self.cerrar_sesion_admin()
             return
 
-        # Si no, procedemos a pedir el PIN dinámico
         from src.models.db_manager import crear_conexion
         pin_real = PIN_ADMIN 
         
@@ -64,11 +93,9 @@ class SistemaAsistencia(ctk.CTk):
             except: pass
             finally: conn.close()
 
-        dialogo = ctk.CTkInputDialog(text="Ingrese el PIN de Administradora:", title="Seguridad")
-        try:
-            password = dialogo.get_input()
-        except:
-            password = None
+        # Usamos nuestro nuevo componente seguro
+        dialogo = DialogoPIN(self)
+        password = dialogo.password
 
         if password == pin_real:
             self.abrir_sesion_admin()

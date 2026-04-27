@@ -39,7 +39,7 @@ class ReportView(ctk.CTkFrame):
         self.datos_exportacion = [] 
         
         # Pivote inicial (Ajustable a datetime.now() en producción)
-        self.fecha_pivote = datetime(2026, 4, 13)
+        self.fecha_pivote = datetime.now()
         self.actualizar_fechas()
 
     def semana_anterior(self):

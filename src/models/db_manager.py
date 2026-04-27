@@ -27,21 +27,21 @@ def crear_conexion():
     return conn
 
 def inicializar_base_de_datos():
-    """Crea las tablas desde cero si no existen."""
     conn = crear_conexion()
     cursor = conn.cursor()
     
-    # Tabla Empleados
+    # 1. Tabla Empleados (Configuración base por persona)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS empleados (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nombre TEXT UNIQUE NOT NULL,
             pago_hora REAL DEFAULT 0.0,
+            jornada_base INTEGER DEFAULT 8, 
             estatus TEXT DEFAULT 'Activo'
         )
     """)
     
-    # Tabla Asistencia
+    # 2. Tabla Asistencia (Con rastro de sucursal)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS asistencia (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,14 +49,28 @@ def inicializar_base_de_datos():
             fecha TEXT,
             hora TEXT,
             tipo_registro TEXT,
+            sucursal TEXT DEFAULT 'Matriz',
             FOREIGN KEY(empleado_nombre) REFERENCES empleados(nombre)
         )
     """)
     
-    # Tabla Configuración (PIN)
+    # 3. TABLA DE AJUSTES (Aquí es donde la configuración es dinámica)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ajustes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            empleado_nombre TEXT,
+            fecha TEXT,
+            monto REAL,
+            tipo TEXT, -- 'Bono' o 'Descuento'
+            motivo TEXT,
+            FOREIGN KEY(empleado_nombre) REFERENCES empleados(nombre)
+        )
+    """)
+    
+    # Configuración de seguridad
     cursor.execute("CREATE TABLE IF NOT EXISTS config (parametro TEXT PRIMARY KEY, valor TEXT)")
     cursor.execute("INSERT OR IGNORE INTO config (parametro, valor) VALUES ('pin_admin', '1234')")
     
     conn.commit()
     conn.close()
-    print("[SISTEMA] Base de datos verificada/creada con éxito.")
+    print("[SISTEMA] Tablas de la V1.1 inicializadas.")

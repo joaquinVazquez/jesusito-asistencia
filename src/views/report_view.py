@@ -36,11 +36,9 @@ class ReportView(ctk.CTkFrame):
         self.tabla_frame = ctk.CTkScrollableFrame(self, height=350, orientation="horizontal", fg_color="#F2F2F2")
         self.tabla_frame.pack(fill="both", expand=True, padx=15, pady=15)
 
-        # Matriz temporal para enviar datos exactos al PDF
         self.datos_exportacion = [] 
         
-        # Inicializamos el pivote en la semana donde tenemos datos simulados (13 Abril 2026)
-        # Posteriormente se puede cambiar a datetime.now() para que arranque en la semana actual
+        # Pivote inicial (Ajustable a datetime.now() en producción)
         self.fecha_pivote = datetime(2026, 4, 13)
         self.actualizar_fechas()
 
@@ -53,7 +51,6 @@ class ReportView(ctk.CTkFrame):
         self.actualizar_fechas()
 
     def actualizar_fechas(self):
-        """Calcula el Lunes y Domingo de la semana pivote actual."""
         lunes = self.fecha_pivote - timedelta(days=self.fecha_pivote.weekday())
         domingo = lunes + timedelta(days=6)
         self.fecha_inicio = lunes.strftime("%Y-%m-%d")
@@ -66,8 +63,9 @@ class ReportView(ctk.CTkFrame):
         for widget in self.tabla_frame.winfo_children():
             widget.destroy()
 
-        headers = ["Personal", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo", "Total Hrs", "Sueldo Semanal"]
-        anchos = [140, 90, 90, 90, 90, 90, 90, 90, 100, 130]
+        # NUEVAS COLUMNAS Y ANCHOS AJUSTADOS (12 columnas en total)
+        headers = ["Personal", "Lu", "Ma", "Mi", "Ju", "Vi", "Sá", "Do", "Total Hrs", "Bonos", "Desc.", "Sueldo Neto"]
+        anchos = [110, 60, 60, 60, 60, 60, 60, 60, 80, 80, 80, 100]
         
         for i, h in enumerate(headers):
             frame_h = ctk.CTkFrame(self.tabla_frame, fg_color=COLOR_PRIMARIO, corner_radius=0, width=anchos[i], height=40)
@@ -79,9 +77,10 @@ class ReportView(ctk.CTkFrame):
         from src.models.db_manager import crear_conexion
         conn = crear_conexion()
         if not conn: return
-        
         cursor = conn.cursor()
-        query = """
+
+        # 1. Consultar Asistencia
+        query_asistencia = """
             SELECT e.nombre, a.fecha, a.hora, a.tipo_registro, e.pago_hora
             FROM empleados e
             LEFT JOIN asistencia a ON e.nombre = a.empleado_nombre
@@ -89,16 +88,33 @@ class ReportView(ctk.CTkFrame):
             WHERE e.estatus = 'Activo'
             ORDER BY e.nombre, a.fecha, a.hora
         """
-        cursor.execute(query, (self.fecha_inicio, self.fecha_fin))
-        filas = cursor.fetchall()
+        cursor.execute(query_asistencia, (self.fecha_inicio, self.fecha_fin))
+        filas_asistencia = cursor.fetchall()
+
+        # 2. Consultar Ajustes (Bonos y Descuentos del periodo seleccionado)
+        query_ajustes = """
+            SELECT empleado_nombre, tipo, SUM(monto) 
+            FROM ajustes 
+            WHERE fecha BETWEEN ? AND ? 
+            GROUP BY empleado_nombre, tipo
+        """
+        cursor.execute(query_ajustes, (self.fecha_inicio, self.fecha_fin))
+        filas_ajustes = cursor.fetchall()
         conn.close()
 
-        self.procesar_y_dibujar(filas, anchos)
+        # Crear diccionario de ajustes por empleado
+        ajustes_dict = {}
+        for nombre, tipo, total in filas_ajustes:
+            if nombre not in ajustes_dict:
+                ajustes_dict[nombre] = {"Bono": 0.0, "Descuento": 0.0}
+            ajustes_dict[nombre][tipo] = total
 
-    def procesar_y_dibujar(self, filas, anchos):
-        self.datos_exportacion = [] # Reiniciamos los datos de exportación
+        self.procesar_y_dibujar(filas_asistencia, ajustes_dict, anchos)
+
+    def procesar_y_dibujar(self, filas_asistencia, ajustes_dict, anchos):
+        self.datos_exportacion = [] 
         nomina = {}
-        for nombre, fecha, hora, tipo, pago in filas:
+        for nombre, fecha, hora, tipo, pago in filas_asistencia:
             if nombre not in nomina:
                 nomina[nombre] = {"dias": {i: [] for i in range(7)}, "pago": pago or 0.0}
             
@@ -111,8 +127,7 @@ class ReportView(ctk.CTkFrame):
         fila_idx = 1
         for nombre, datos in nomina.items():
             self._insertar_celda(fila_idx, 0, nombre, anchos[0], "bold")
-            
-            fila_matriz = [nombre] # Lista para inyectar al PDF
+            fila_matriz = [nombre] 
             horas_acumuladas = 0.0
 
             for dia in range(7):
@@ -130,15 +145,22 @@ class ReportView(ctk.CTkFrame):
                 self._insertar_celda(fila_idx, dia + 1, texto_dia, anchos[dia+1])
                 fila_matriz.append(texto_dia)
 
-            self._insertar_celda(fila_idx, 8, f"{horas_acumuladas:.2f} hrs", anchos[8], "bold")
-            fila_matriz.append(f"{horas_acumuladas:.2f}")
+            # LÓGICA FINANCIERA
+            bono = ajustes_dict.get(nombre, {}).get("Bono", 0.0)
+            desc = ajustes_dict.get(nombre, {}).get("Descuento", 0.0)
+            salario_base = horas_acumuladas * datos["pago"]
+            salario_neto = salario_base + bono - desc
 
-            salario = horas_acumuladas * datos["pago"]
-            salario_txt = f"${salario:,.2f}"
-            self._insertar_celda(fila_idx, 9, salario_txt, anchos[9], "bold", "#006400")
-            fila_matriz.append(salario_txt)
+            # Rellenar UI con Horas, Bono, Descuento y Neto
+            self._insertar_celda(fila_idx, 8, f"{horas_acumuladas:.2f}", anchos[8], "bold")
+            self._insertar_celda(fila_idx, 9, f"${bono:,.2f}", anchos[9], "normal", "blue")
+            self._insertar_celda(fila_idx, 10, f"-${desc:,.2f}", anchos[10], "normal", "red")
+            self._insertar_celda(fila_idx, 11, f"${salario_neto:,.2f}", anchos[11], "bold", "#006400")
             
-            self.datos_exportacion.append(fila_matriz) # Guardamos fila calculada
+            # Guardar en matriz para PDF
+            fila_matriz.extend([f"{horas_acumuladas:.2f}", f"${bono:,.2f}", f"${desc:,.2f}", f"${salario_neto:,.2f}"])
+            self.datos_exportacion.append(fila_matriz)
+            
             fila_idx += 1
 
     def _insertar_celda(self, f, c, txt, w, peso="normal", color="black"):
@@ -150,7 +172,6 @@ class ReportView(ctk.CTkFrame):
         lbl.place(relx=0.5, rely=0.5, anchor="center")
 
     def exportar_pdf(self):
-        """Invoca el generador de PDF pasando la matriz exacta de la vista."""
         ruta_destino = filedialog.asksaveasfilename(
             defaultextension=".pdf",
             initialfile=f"Nomina_{self.fecha_inicio}_al_{self.fecha_fin}.pdf",

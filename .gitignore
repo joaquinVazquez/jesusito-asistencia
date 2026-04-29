@@ -26,3 +26,23 @@ dist/
 
 # Variables de entorno y configuraciones locales
 .env
+
+# Entornos virtuales
+venv/
+env/
+
+# Variables de entorno y secretos (CRÍTICO)
+.env
+
+# Caché de Python
+__pycache__/
+*.pyc
+
+# Archivos de compilación de PyInstaller
+build/
+dist/
+*.spec
+
+# Base de datos local vieja (ya no se usa)
+data/
+*.db

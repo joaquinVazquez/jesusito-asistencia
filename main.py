@@ -1,157 +1,150 @@
 import customtkinter as ctk
+from tkinter import messagebox
 import os
-import sys
+from dotenv import load_dotenv
+from src.views.asistencia_view import AsistenciaFrame
+from src.views.empleado_view import EmpleadoFrame
+from src.views.nomina_view import NominaFrame
 
-# Rutas y Configuración
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(BASE_DIR)
 
-from config.theme import COLOR_PRIMARIO, COLOR_FONDO
+# Cargamos variables de entorno
+load_dotenv()
 
-# Clave de acceso administrativa (Se usará si no hay una en BD)
-PIN_ADMIN = "1234"
-
+# =========================================================
+# COMPONENTE DE SEGURIDAD (MODAL PIN)
+# =========================================================
 class DialogoPIN(ctk.CTkToplevel):
     def __init__(self, master):
         super().__init__(master)
-        self.title("Seguridad")
-        self.geometry("300x170")
+        self.title("Seguridad Requerida")
+        self.geometry("300x180")
         self.resizable(False, False)
-        self.password = None
+        self.acceso_concedido = False
         
-        # Centrar ventana
+        # Centrar ventana modal
         self.update_idletasks()
         x = master.winfo_x() + (master.winfo_width() // 2) - 150
-        y = master.winfo_y() + (master.winfo_height() // 2) - 85
+        y = master.winfo_y() + (master.winfo_height() // 2) - 90
         self.geometry(f"+{x}+{y}")
 
-        ctk.CTkLabel(self, text="Ingrese PIN de Administradora:", font=("Helvetica", 14, "bold")).pack(pady=(20, 10))
+        ctk.CTkLabel(self, text="Ingrese PIN de Administrador:", font=("Helvetica", 14, "bold")).pack(pady=(25, 10))
         
-        # El parámetro show="*" es la clave de la seguridad visual
-        self.ent_pin = ctk.CTkEntry(self, show="*", justify="center", width=150)
+        self.ent_pin = ctk.CTkEntry(self, show="*", justify="center", width=150, font=("Helvetica", 18))
         self.ent_pin.pack(pady=5)
-        self.ent_pin.bind("<Return>", self.enviar)
+        self.ent_pin.bind("<Return>", self.verificar)
         
-        ctk.CTkButton(self, text="Entrar", fg_color=COLOR_PRIMARIO, command=self.enviar).pack(pady=15)
+        ctk.CTkButton(self, text="Desbloquear", fg_color="#28a745", hover_color="#218838", command=self.verificar).pack(pady=15)
         
-        self.ent_pin.focus() # Pone el cursor automáticamente
-        self.grab_set()      # Bloquea la ventana principal hasta que se cierre esta
+        self.ent_pin.focus()
+        self.grab_set()
         self.wait_window()
 
-    def enviar(self, event=None):
-        self.password = self.ent_pin.get()
-        self.destroy()
+    def verificar(self, event=None):
+        pin_ingresado = self.ent_pin.get()
+        # TODO: Leer PIN real desde PostgreSQL. Por ahora hardcodeamos el default
+        if pin_ingresado == "1234": 
+            self.acceso_concedido = True
+            self.destroy()
+        else:
+            messagebox.showerror("Error", "PIN Incorrecto. Acceso denegado.")
+            self.ent_pin.delete(0, 'end')
 
-class SistemaAsistencia(ctk.CTk):
+# =========================================================
+# VISTAS TEMPORALES (Evitan crasheos mientras migramos a PG)
+# =========================================================
+class VistaEnConstruccion(ctk.CTkFrame):
+    def __init__(self, master, titulo):
+        super().__init__(master, fg_color="white", corner_radius=10)
+        ctk.CTkLabel(self, text=titulo, font=("Helvetica", 28, "bold"), text_color="#1a1a1a").pack(expand=True, pady=(100, 0))
+        ctk.CTkLabel(self, text="Migrando conexión a PostgreSQL...", font=("Helvetica", 14), text_color="#666").pack(expand=True, pady=(0, 100))
+
+# =========================================================
+# CONTENEDOR PRINCIPAL V2.0
+# =========================================================
+class MainApp(ctk.CTk):
     def __init__(self):
         super().__init__()
-        
-        self.title("Jesusito Pastelerías - Terminal de Asistencia")
-        self.geometry("1000x800")
-        self.configure(fg_color=COLOR_FONDO)
-        
-        # 1. Contenedor Desplazable
-        self.scroll_container = ctk.CTkScrollableFrame(self, fg_color="transparent", corner_radius=0)
-        self.scroll_container.pack(fill="both", expand=True, padx=10, pady=10)
+        self.title("Jesusito Pastelerías ERP - V2.0 Cloud")
+        self.geometry("1100x650")
+        ctk.set_appearance_mode("light")
 
-        # 2. Encabezado con Botón de Bloqueo
-        self.header = ctk.CTkFrame(self.scroll_container, fg_color="transparent")
-        self.header.pack(fill="x", pady=(10, 20))
-        
-        self.lbl_titulo = ctk.CTkLabel(self.header, text="JESUSITO PASTELERÍAS", font=("Helvetica", 28, "bold"), text_color=COLOR_PRIMARIO)
-        self.lbl_titulo.pack(side="left", padx=40)
+        # Configuración de Grid Base
+        self.grid_columnconfigure(1, weight=1) # El main_container se expande
+        self.grid_rowconfigure(0, weight=1)
 
-        self.btn_admin = ctk.CTkButton(self.header, text="🔒 Modo Admin", width=120, fg_color="gray", command=self.verificar_admin)
-        self.btn_admin.pack(side="right", padx=40)
+        # --- PANEL LATERAL (SIDEBAR) ---
+        self.sidebar = ctk.CTkFrame(self, width=220, corner_radius=0, fg_color="#2c3e50")
+        self.sidebar.grid(row=0, column=0, sticky="nsew")
+        self.sidebar.grid_rowconfigure(6, weight=1) # Empuja versión al fondo
 
-        # 3. Módulo de Asistencia (PÚBLICO - Siempre visible)
-        # CORRECCIÓN: Se agrega el prefijo src.views para localizar el archivo
-        from src.views.asistencia_view import AsistenciaFrame
-        self.panel_asistencia = AsistenciaFrame(self.scroll_container)
-        self.panel_asistencia.pack(pady=10, padx=40, fill="x")
+        # Branding
+        self.logo = ctk.CTkLabel(self.sidebar, text="JESUSITO\nPASTELERÍAS", font=("Helvetica", 20, "bold"), text_color="white")
+        self.logo.grid(row=0, column=0, padx=20, pady=(30, 30))
 
-        # Contenedores para módulos privados inicializados en vacío
-        self.panel_empleados = None
-        self.panel_reporte = None
-        self.panel_gerencial = None
+        # Botones de Navegación
+        self.btn_reloj = self._crear_boton_nav(1, "⏱️ Reloj Checador", self.nav_reloj)
+        self.btn_personal = self._crear_boton_nav(2, "👥 Personal", self.nav_personal, protegido=True)
+        self.btn_nomina = self._crear_boton_nav(3, "💰 Nómina Interactiva", self.nav_nomina, protegido=True)
+        self.btn_config = self._crear_boton_nav(4, "⚙️ Ajustes", self.nav_config, protegido=True)
 
-    def verificar_admin(self):
-        if self.panel_empleados is not None or self.panel_reporte is not None:
-            self.cerrar_sesion_admin()
-            return
+        self.lbl_status = ctk.CTkLabel(self.sidebar, text="🟢 Conectado a la Nube", font=("Helvetica", 10), text_color="#2ecc71")
+        self.lbl_status.grid(row=7, column=0, pady=(10, 20))
 
-        from src.models.db_manager import crear_conexion
-        pin_real = PIN_ADMIN 
+        # --- ÁREA DE TRABAJO PRINCIPAL ---
+        self.main_container = ctk.CTkFrame(self, fg_color="#f0f2f5", corner_radius=0)
+        self.main_container.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
         
-        conn = crear_conexion()
-        if conn:
-            try:
-                cursor = conn.cursor()
-                cursor.execute("SELECT valor FROM config WHERE parametro = 'pin_admin'")
-                resultado = cursor.fetchone()
-                if resultado: pin_real = resultado[0]
-            except: pass
-            finally: conn.close()
+        self.vista_actual = None
+        self.sesion_admin_activa = False
 
-        # Usamos nuestro nuevo componente seguro
-        dialogo = DialogoPIN(self)
-        password = dialogo.password
+        # Iniciar en Reloj Checador
+        self.nav_reloj()
 
-        if password == pin_real:
-            self.abrir_sesion_admin()
-        elif password is not None:
-            from tkinter import messagebox
-            messagebox.showerror("Error", "PIN Incorrecto")
+    def _crear_boton_nav(self, fila, texto, comando, protegido=False):
+        # Si es protegido, le inyectamos la validación de PIN
+        cmd_final = lambda: self._rutear_acceso(comando) if protegido else comando
+        
+        btn = ctk.CTkButton(self.sidebar, text=texto, fg_color="transparent", text_color="#ecf0f1",
+                            anchor="w", font=("Helvetica", 14, "bold"), hover_color="#34495e", 
+                            height=45, command=cmd_final)
+        btn.grid(row=fila, column=0, sticky="ew", padx=10, pady=5)
+        return btn
 
-    def abrir_sesion_admin(self):
-        # 1. Importaciones con rutas absolutas
-        from src.views.empleado_view import EmpleadoFrame
-        from src.views.gerencial_view import GerencialFrame
-        from src.views.report_view import ReportView 
-        
-        # 2. OCULTAMOS el panel de asistencia
-        self.panel_asistencia.pack_forget()
-        
-        self.btn_admin.configure(text="🔓 Salir Admin", fg_color=COLOR_PRIMARIO)
-        
-        # 3. Inyectamos paneles administrativos
-        self.panel_empleados = EmpleadoFrame(self.scroll_container)
-        self.panel_empleados.pack(pady=10, padx=40, fill="x")
-        
-        self.panel_reporte = ReportView(self.scroll_container)
-        self.panel_reporte.pack(pady=10, padx=40, fill="x")
-        
-        self.panel_gerencial = GerencialFrame(self.scroll_container)
-        self.panel_gerencial.pack(pady=10, padx=40, fill="x")
+    def _rutear_acceso(self, comando_destino):
+        """Valida si el Admin ya metió su PIN antes de cambiar de pantalla"""
+        if not self.sesion_admin_activa:
+            dialogo = DialogoPIN(self)
+            if dialogo.acceso_concedido:
+                self.sesion_admin_activa = True
+                comando_destino()
+        else:
+            comando_destino()
 
-    def cerrar_sesion_admin(self):
-        print("[DEBUG] Cerrando sesión y limpiando estados...")
-        self.btn_admin.configure(text="🔒 Modo Admin", fg_color="gray")
-        
-        # Destrucción física y limpieza de referencias
-        if self.panel_empleados:
-            self.panel_empleados.destroy()
-            self.panel_empleados = None
-            
-        if self.panel_reporte:
-            self.panel_reporte.destroy()
-            self.panel_reporte = None
-            
-        if self.panel_gerencial:
-            self.panel_gerencial.destroy()
-            self.panel_gerencial = None
-        
-        # Refrescar y restaurar panel operativo
-        self.panel_asistencia.actualizar_lista_empleados()
-        self.panel_asistencia.pack(pady=10, padx=40, fill="x")
+    def _limpiar_contenedor(self):
+        if self.vista_actual:
+            self.vista_actual.destroy()
+
+    # --- RUTAS DE NAVEGACIÓN ---
+    def nav_reloj(self):
+        self._limpiar_contenedor()
+        self.vista_actual = AsistenciaFrame(self.main_container)
+        self.vista_actual.pack(fill="both", expand=True, padx=20, pady=20)
+
+    def nav_personal(self):
+     self._limpiar_contenedor()
+     self.vista_actual = EmpleadoFrame(self.main_container)
+     self.vista_actual.pack(fill="both", expand=True, padx=20, pady=20)
+
+    def nav_nomina(self):
+     self._limpiar_contenedor()
+     self.vista_actual = NominaFrame(self.main_container)
+     self.vista_actual.pack(fill="both", expand=True, padx=20, pady=20)
+
+    def nav_config(self):
+        self._limpiar_contenedor()
+        self.vista_actual = VistaEnConstruccion(self.main_container, "⚙️ Ajustes de Sistema")
+        self.vista_actual.pack(fill="both", expand=True, padx=20, pady=20)
 
 if __name__ == "__main__":
-    from src.models.db_manager import inicializar_base_de_datos
-    
-    # 1. Verificamos o creamos la base de datos
-    inicializar_base_de_datos()
-    
-    # 2. Arrancamos la interfaz gráfica
-    # CORRECCIÓN: No se debe pasar ctk.CTk como argumento
-    app = SistemaAsistencia() 
+    app = MainApp()
     app.mainloop()

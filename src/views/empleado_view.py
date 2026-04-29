@@ -1,7 +1,8 @@
 import customtkinter as ctk
 from tkinter import messagebox
 from datetime import datetime
-import sqlite3
+from tkcalendar import DateEntry
+from src.models.db_manager import ejecutar_query
 
 class EmpleadoFrame(ctk.CTkFrame):
     def __init__(self, master):
@@ -21,7 +22,6 @@ class EmpleadoFrame(ctk.CTkFrame):
         frame_izq = ctk.CTkFrame(self, fg_color="white", corner_radius=10)
         frame_izq.grid(row=0, column=0, padx=(0, 10), pady=10, sticky="nsew")
         
-        # Color oscuro forzado para los títulos
         ctk.CTkLabel(frame_izq, text="Directorio de Personal", font=("Helvetica", 16, "bold"), text_color="#1a1a1a").pack(pady=10)
         
         self.ent_buscador = ctk.CTkEntry(frame_izq, placeholder_text="🔍 Buscar por nombre...", fg_color="#f8f9fa", text_color="#000000")
@@ -46,8 +46,11 @@ class EmpleadoFrame(ctk.CTkFrame):
         self.campos['rol'] = self._crear_input(3, 0, "Rol / Puesto")
         self.campos['telefono'] = self._crear_input(3, 2, "Teléfono")
         self.campos['direccion'] = self._crear_input(4, 0, "Dirección Completa", colspan=3, width=420)
-        self.campos['fecha_nacimiento'] = self._crear_input(5, 0, "Nacimiento (YYYY-MM-DD)")
-        self.campos['fecha_ingreso'] = self._crear_input(5, 2, "Ingreso (YYYY-MM-DD)")
+        
+        # Nuevos selectores de Calendario
+        self.campos['fecha_nacimiento'] = self._crear_calendario(5, 0, "Fecha Nacimiento")
+        self.campos['fecha_ingreso'] = self._crear_calendario(5, 2, "Fecha Ingreso")
+        
         self.campos['pago_hora'] = self._crear_input(6, 0, "Pago por Hora ($)")
         self.campos['jornada_base'] = self._crear_input(6, 2, "Jornada Base (Hrs)")
         self.campos['expediente'] = self._crear_input(7, 0, "Enlace a Expediente", colspan=3, width=420)
@@ -62,9 +65,7 @@ class EmpleadoFrame(ctk.CTkFrame):
         ctk.CTkButton(frame_acciones, text="💾 Guardar Cambios", fg_color="#28a745", hover_color="#218838", text_color="white", command=self.guardar_empleado).pack(side="left", padx=10)
 
     def _crear_input(self, row, col, label_text, colspan=1, width=150):
-        # Etiquetas de alto contraste
         ctk.CTkLabel(self.frame_der, text=label_text, font=("Helvetica", 12, "bold"), text_color="#333333").grid(row=row, column=col, padx=10, pady=5, sticky="w")
-        # Inputs blancos con texto negro puro
         ent = ctk.CTkEntry(self.frame_der, width=width, fg_color="#ffffff", text_color="#000000", border_color="#cccccc")
         ent.grid(row=row, column=col+1, columnspan=colspan, padx=10, pady=5, sticky="w")
         return ent
@@ -75,20 +76,28 @@ class EmpleadoFrame(ctk.CTkFrame):
         cmb.grid(row=row, column=col+1, padx=10, pady=5, sticky="w")
         return cmb
 
+    def _crear_calendario(self, row, col, label_text):
+        ctk.CTkLabel(self.frame_der, text=label_text, font=("Helvetica", 12, "bold"), text_color="#333333").grid(row=row, column=col, padx=10, pady=5, sticky="w")
+        # Selector visual con formato de base de datos
+        cal = DateEntry(self.frame_der, width=18, background='#2c3e50', foreground='white', 
+                        borderwidth=2, date_pattern='yyyy-mm-dd', state="readonly")
+        cal.grid(row=row, column=col+1, padx=10, pady=5, sticky="w")
+        cal.delete(0, 'end') # Lo dejamos en blanco por defecto
+        return cal
+
     def cargar_lista_empleados(self, filtro=""):
         for widget in self.scroll_lista.winfo_children():
             widget.destroy()
             
-        from src.models.db_manager import crear_conexion
-        conn = crear_conexion()
-        if not conn: return
-        cursor = conn.cursor()
+        query = "SELECT nombre, rol FROM empleados WHERE nombre ILIKE %s ORDER BY nombre"
+        filas = ejecutar_query(query, (f"%{filtro}%",), fetch=True)
         
-        cursor.execute("SELECT nombre, rol FROM empleados WHERE nombre LIKE ? ORDER BY nombre", (f"%{filtro}%",))
-        
-        for nombre, rol in cursor.fetchall():
-            rol_txt = rol if rol else "General"
-            # Añadimos corner_radius=0 y border_spacing=5
+        if not filas: return
+
+        for row in filas:
+            nombre = row['nombre']
+            rol_txt = row['rol'] if row['rol'] else "General"
+            
             btn = ctk.CTkButton(self.scroll_lista, text=f"{nombre}\n({rol_txt})", 
                                 fg_color="#f8f9fa", text_color="#000000", hover_color="#e2e6ea",
                                 corner_radius=0, border_spacing=5,
@@ -96,36 +105,34 @@ class EmpleadoFrame(ctk.CTkFrame):
             btn.pack(fill="x", pady=2)
 
     def seleccionar_empleado(self, nombre):
-        from src.models.db_manager import crear_conexion
-        conn = crear_conexion()
-        cursor = conn.cursor()
+        query = "SELECT * FROM empleados WHERE nombre = %s"
+        filas = ejecutar_query(query, (nombre,), fetch=True)
         
-        # CORRECCIÓN CRÍTICA: Definir el orden exacto de las columnas
-        cursor.execute("""
-            SELECT nombre, telefono, rol, direccion, fecha_nacimiento, 
-                   fecha_ingreso, expediente, pago_hora, jornada_base, estatus 
-            FROM empleados WHERE nombre=?
-        """, (nombre,))
-        row = cursor.fetchone()
-        conn.close()
-        
-        if row:
+        if filas:
+            row = filas[0]
             self.limpiar_formulario()
-            self.empleado_actual = row[0]
+            self.empleado_actual = row['nombre']
             
-            self.campos['nombre'].insert(0, row[0] or "")
+            self.campos['nombre'].insert(0, row['nombre'] or "")
             self.campos['nombre'].configure(state="disabled") 
-            self.campos['telefono'].insert(0, row[1] or "")
-            self.campos['rol'].insert(0, row[2] or "")
-            self.campos['direccion'].insert(0, row[3] or "")
-            self.campos['fecha_nacimiento'].insert(0, row[4] or "")
-            self.campos['fecha_ingreso'].insert(0, row[5] or "")
-            self.campos['expediente'].insert(0, row[6] or "")
-            self.campos['pago_hora'].insert(0, str(row[7] if row[7] is not None else ""))
-            self.campos['jornada_base'].insert(0, str(row[8] if row[8] is not None else ""))
-            self.campos['estatus'].set(row[9] or "Activo")
+            self.campos['telefono'].insert(0, row['telefono'] or "")
+            self.campos['rol'].insert(0, row['rol'] or "")
+            self.campos['direccion'].insert(0, row['direccion'] or "")
             
-            self.motor_fechas_y_alertas(row[4], row[5])
+            # Inyección de fechas en el calendario
+            if row['fecha_nacimiento']:
+                self.campos['fecha_nacimiento'].set_date(row['fecha_nacimiento'])
+            if row['fecha_ingreso']:
+                self.campos['fecha_ingreso'].set_date(row['fecha_ingreso'])
+            
+            self.campos['expediente'].insert(0, row['expediente'] or "")
+            self.campos['pago_hora'].insert(0, str(row['pago_hora'] if row['pago_hora'] is not None else ""))
+            self.campos['jornada_base'].insert(0, str(row['jornada_base'] if row['jornada_base'] is not None else ""))
+            self.campos['estatus'].set(row['estatus'] or "Activo")
+            
+            fnac = row['fecha_nacimiento'].strftime("%Y-%m-%d") if row['fecha_nacimiento'] else ""
+            fing = row['fecha_ingreso'].strftime("%Y-%m-%d") if row['fecha_ingreso'] else ""
+            self.motor_fechas_y_alertas(fnac, fing)
 
     def motor_fechas_y_alertas(self, nacimiento, ingreso):
         self.lbl_alerta.grid_forget()
@@ -150,7 +157,7 @@ class EmpleadoFrame(ctk.CTkFrame):
                     meses += 12
                 self.lbl_antiguedad.configure(text=f"Antigüedad: {anos} años, {meses} meses")
             except:
-                self.lbl_antiguedad.configure(text="Antigüedad: Error de formato (Use YYYY-MM-DD)")
+                self.lbl_antiguedad.configure(text="Antigüedad: Error de cálculo")
 
     def guardar_empleado(self):
         datos = {k: v.get() for k, v in self.campos.items()}
@@ -158,39 +165,42 @@ class EmpleadoFrame(ctk.CTkFrame):
             messagebox.showwarning("Auditoría", "El nombre es un campo obligatorio.")
             return
             
-        from src.models.db_manager import crear_conexion
-        conn = crear_conexion()
-        cursor = conn.cursor()
-        
         try:
             pago = float(datos['pago_hora']) if datos['pago_hora'] else 0.0
             jornada = int(datos['jornada_base']) if datos['jornada_base'] else 8
             
-            if self.empleado_actual:
-                cursor.execute("""
-                    UPDATE empleados SET 
-                    telefono=?, rol=?, direccion=?, fecha_nacimiento=?, 
-                    fecha_ingreso=?, expediente=?, pago_hora=?, jornada_base=?, estatus=?
-                    WHERE nombre=?
-                """, (datos['telefono'], datos['rol'], datos['direccion'], datos['fecha_nacimiento'],
-                      datos['fecha_ingreso'], datos['expediente'], pago, jornada, datos['estatus'], self.empleado_actual))
-            else:
-                cursor.execute("""
-                    INSERT INTO empleados (nombre, telefono, rol, direccion, fecha_nacimiento, fecha_ingreso, expediente, pago_hora, jornada_base, estatus)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (datos['nombre'], datos['telefono'], datos['rol'], datos['direccion'], datos['fecha_nacimiento'],
-                      datos['fecha_ingreso'], datos['expediente'], pago, jornada, datos['estatus']))
+            # Captura segura de los calendarios (vacíos o con fecha)
+            f_nac = datos['fecha_nacimiento'] if datos['fecha_nacimiento'] else None
+            f_ing = datos['fecha_ingreso'] if datos['fecha_ingreso'] else None
             
-            conn.commit()
-            messagebox.showinfo("Transacción", "Expediente guardado/actualizado correctamente.")
-            self.cargar_lista_empleados()
-            self.limpiar_formulario()
-        except sqlite3.IntegrityError:
-            messagebox.showerror("Error", "Ya existe un registro bajo este nombre.")
+            if self.empleado_actual:
+                query = """
+                    UPDATE empleados SET 
+                    telefono=%s, rol=%s, direccion=%s, fecha_nacimiento=%s, 
+                    fecha_ingreso=%s, expediente=%s, pago_hora=%s, jornada_base=%s, estatus=%s
+                    WHERE nombre=%s
+                """
+                params = (datos['telefono'], datos['rol'], datos['direccion'], f_nac, f_ing, 
+                          datos['expediente'], pago, jornada, datos['estatus'], self.empleado_actual)
+            else:
+                query = """
+                    INSERT INTO empleados (nombre, telefono, rol, direccion, fecha_nacimiento, fecha_ingreso, expediente, pago_hora, jornada_base, estatus)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                params = (datos['nombre'], datos['telefono'], datos['rol'], datos['direccion'], f_nac, 
+                          f_ing, datos['expediente'], pago, jornada, datos['estatus'])
+            
+            exito = ejecutar_query(query, params)
+            
+            if exito is True:
+                messagebox.showinfo("Transacción", "Expediente procesado en PostgreSQL correctamente.")
+                self.cargar_lista_empleados()
+                self.limpiar_formulario()
+            else:
+                messagebox.showerror("Error SQL", f"Fallo en la transacción:\n{exito}")
+                
         except ValueError:
             messagebox.showerror("Validación", "Los campos 'Pago' y 'Jornada' deben ser números.")
-        finally:
-            conn.close()
 
     def limpiar_formulario(self):
         self.empleado_actual = None
@@ -201,4 +211,6 @@ class EmpleadoFrame(ctk.CTkFrame):
         for k, v in self.campos.items():
             if isinstance(v, ctk.CTkEntry):
                 v.delete(0, 'end')
+            elif k in ['fecha_nacimiento', 'fecha_ingreso']:
+                v.delete(0, 'end') # Limpia el calendario
         self.campos['estatus'].set("Activo")

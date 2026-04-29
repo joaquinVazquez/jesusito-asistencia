@@ -53,10 +53,16 @@ class AsistenciaFrame(ctk.CTkFrame):
         self.btn_salida.pack(side="left", padx=15)
 
     def _actualizar_reloj_local(self):
-        """Mantiene el reloj visual en movimiento (Solo visual)"""
+        """Mantiene el reloj visual en movimiento de forma segura."""
+        # SEGURO CONTRA CRASHEOS: Si el widget fue destruido al cambiar de pestaña, matamos el ciclo.
+        if not self.winfo_exists():
+            return 
+            
         ahora = datetime.now()
         self.lbl_reloj.configure(text=ahora.strftime("%H:%M:%S"))
         self.lbl_fecha.configure(text=ahora.strftime("%A, %d de %B de %Y").capitalize())
+        
+        # Guardamos la referencia para que Tkinter no pierda el hilo
         self.after(1000, self._actualizar_reloj_local)
 
     def _cargar_catalogos(self):

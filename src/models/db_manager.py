@@ -27,7 +27,15 @@ def ejecutar_query(query, parametros=None, fetch=False):
     if not conn: return False
     
     try:
+        from psycopg2.extras import RealDictCursor
         cursor = conn.cursor(cursor_factory=RealDictCursor)
+        
+        # --- FIX DE ZONA HORARIA ---
+        # Forzamos al servidor de AWS a operar en la hora de Chiapas/Centro de México
+        # para esta transacción específica.
+        cursor.execute("SET TIME ZONE 'America/Mexico_City';")
+        # ---------------------------
+        
         cursor.execute(query, parametros)
         
         if fetch:
@@ -40,7 +48,7 @@ def ejecutar_query(query, parametros=None, fetch=False):
     except Exception as e:
         print(f"[ERROR SQL] {e}")
         conn.rollback()
-        return str(e) # Retorna el error exacto para mostrarlo en la interfaz
+        return str(e)
     finally:
         if 'cursor' in locals(): cursor.close()
         if conn: conn.close()

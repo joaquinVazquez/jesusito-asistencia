@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from src.views.asistencia_view import AsistenciaFrame
 from src.views.empleado_view import EmpleadoFrame
 from src.views.nomina_view import NominaFrame
+from src.models.db_manager import ejecutar_query
+from src.views.config_view import ConfigFrame
 
 
 # Cargamos variables de entorno
@@ -41,12 +43,16 @@ class DialogoPIN(ctk.CTkToplevel):
 
     def verificar(self, event=None):
         pin_ingresado = self.ent_pin.get()
-        # TODO: Leer PIN real desde PostgreSQL. Por ahora hardcodeamos el default
-        if pin_ingresado == "1234": 
+        
+        # Validar contra PostgreSQL
+        res = ejecutar_query("SELECT valor FROM config WHERE parametro = 'pin_admin'", fetch=True)
+        pin_real = res[0]['valor'] if res else "1234"
+        
+        if pin_ingresado == pin_real: 
             self.acceso_concedido = True
             self.destroy()
         else:
-            messagebox.showerror("Error", "PIN Incorrecto. Acceso denegado.")
+            messagebox.showerror("Error", "PIN incorrecto.")
             self.ent_pin.delete(0, 'end')
 
 # =========================================================
@@ -86,6 +92,11 @@ class MainApp(ctk.CTk):
         self.btn_personal = self._crear_boton_nav(2, "👥 Personal", self.nav_personal, protegido=True)
         self.btn_nomina = self._crear_boton_nav(3, "💰 Nómina Interactiva", self.nav_nomina, protegido=True)
         self.btn_config = self._crear_boton_nav(4, "⚙️ Ajustes", self.nav_config, protegido=True)
+        self.btn_config = self._crear_boton_nav(4, "⚙️ Ajustes", self.nav_config, protegido=True)
+        self.btn_logout = ctk.CTkButton(self.sidebar, text="🚪 Salir del Admin", fg_color="#c0392b", 
+                                        hover_color="#a93226", font=("Helvetica", 12, "bold"),
+                                        command=self.cerrar_sesion_admin)
+        self.btn_logout.grid(row=5, column=0, sticky="ew", padx=20, pady=(50, 10))
 
         self.lbl_status = ctk.CTkLabel(self.sidebar, text="🟢 Conectado a la Nube", font=("Helvetica", 10), text_color="#2ecc71")
         self.lbl_status.grid(row=7, column=0, pady=(10, 20))
@@ -124,6 +135,14 @@ class MainApp(ctk.CTk):
         if self.vista_actual:
             self.vista_actual.destroy()
 
+    # --- INYECTAR AQUÍ ---
+    def cerrar_sesion_admin(self):
+        self.sesion_admin_activa = False
+        self.nav_reloj()
+        from tkinter import messagebox # Por si no está importado arriba
+        messagebox.showinfo("Sesión Cerrada", "Has salido del modo Administrador.")
+    # ---------------------
+
     # --- RUTAS DE NAVEGACIÓN ---
     def nav_reloj(self):
         self._limpiar_contenedor()
@@ -142,7 +161,7 @@ class MainApp(ctk.CTk):
 
     def nav_config(self):
         self._limpiar_contenedor()
-        self.vista_actual = VistaEnConstruccion(self.main_container, "⚙️ Ajustes de Sistema")
+        self.vista_actual = ConfigFrame(self.main_container)
         self.vista_actual.pack(fill="both", expand=True, padx=20, pady=20)
 
 if __name__ == "__main__":

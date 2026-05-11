@@ -61,12 +61,60 @@ class EditorAuditoriaModal(ctk.CTkToplevel):
                 ctk.CTkButton(f_botones, text="✏️", width=30, fg_color="#f39c12", command=lambda rid=r['id'], ent=r['entrada'], sal=r['salida']: self.abrir_editor_tiempo(rid, ent, sal)).pack(side="right", padx=2)
 
     def abrir_editor_tiempo(self, rid, ent, sal):
-        # ... (Logica de sub-modal de edición)
-        pass
+        modal = ctk.CTkToplevel(self)
+        modal.title("Auditoría de Tiempo")
+        modal.geometry("350x280")
+        modal.grab_set() # Bloquea la ventana inferior
 
-    def guardar_edicion_tiempo(self, rid, ent, sal, vent):
-        # ... (Lógica de guardado)
-        pass
+        # Centrar ventana
+        modal.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() // 2) - 175
+        y = self.winfo_y() + (self.winfo_height() // 2) - 140
+        modal.geometry(f"+{x}+{y}")
+
+        ctk.CTkLabel(modal, text="Hora de Entrada (YYYY-MM-DD HH:MM):", font=("Helvetica", 12, "bold")).pack(pady=(15, 0))
+        ent_entrada = ctk.CTkEntry(modal, width=220, justify="center")
+        ent_entrada.pack(pady=5)
+        # Pre-llenamos con el valor actual
+        ent_entrada.insert(0, ent.strftime('%Y-%m-%d %H:%M') if ent else "")
+
+        ctk.CTkLabel(modal, text="Hora de Salida (YYYY-MM-DD HH:MM):", font=("Helvetica", 12, "bold")).pack(pady=(15, 0))
+        ent_salida = ctk.CTkEntry(modal, width=220, justify="center")
+        ent_salida.pack(pady=5)
+        # Pre-llenamos con el valor actual, si no tiene salida, lo dejamos en blanco
+        ent_salida.insert(0, sal.strftime('%Y-%m-%d %H:%M') if sal else "")
+        
+        ctk.CTkLabel(modal, text="* Deja la salida en blanco si el turno sigue abierto", font=("Helvetica", 10, "italic"), text_color="gray").pack()
+
+        ctk.CTkButton(modal, text="💾 Aplicar Corrección", fg_color="#28a745", hover_color="#218838",
+                      command=lambda: self.guardar_edicion_tiempo(rid, ent_entrada.get(), ent_salida.get(), modal)).pack(pady=20)
+
+    def guardar_edicion_tiempo(self, rid, str_entrada, str_salida, ventana):
+        try:
+            # 1. Validación de parseo estricto para evitar corromper la BD
+            if str_entrada: 
+                datetime.strptime(str_entrada, '%Y-%m-%d %H:%M')
+            else:
+                return messagebox.showwarning("Auditoría", "La hora de entrada no puede estar vacía.")
+                
+            val_salida = None
+            if str_salida.strip():
+                datetime.strptime(str_salida, '%Y-%m-%d %H:%M')
+                val_salida = str_salida.strip()
+
+            # 2. Ejecutar Update
+            query = "UPDATE asistencia SET entrada = %s, salida = %s WHERE id = %s"
+            exito = ejecutar_query(query, (str_entrada, val_salida, rid))
+
+            if exito is True:
+                ventana.destroy()
+                self.cargar_asistencia_individual() # Refresca el sub-modal
+                self.callback_refresh()             # Refresca la tabla matriz
+            else:
+                messagebox.showerror("Error SQL", f"La nube rechazó la operación:\n{exito}")
+                
+        except ValueError:
+            messagebox.showerror("Fallo de Sintaxis", "Utiliza exactamente el formato militar de 24 hrs:\n\nYYYY-MM-DD HH:MM\nEjemplo: 2026-04-29 14:30")
 
     def eliminar_asistencia(self, rid):
         if messagebox.askyesno("Confirmar", "¿Eliminar registro?"):

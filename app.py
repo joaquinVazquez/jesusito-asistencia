@@ -139,13 +139,14 @@ def mostrar_app():
         # Construcción unificada del menú dinámico
         menu = ["⏱️ Reloj Checador"]
 
+        # Módulos compartidos entre Admin y Encargado
         if st.session_state.rol in ["Admin", "Encargado"]:
-            menu.append("📝 Registrar Encargos")
+            menu.extend(["📝 Registrar Encargos", "💰 Nómina"])
 
+        # Módulos exclusivos de la Dirección General (Admin)
         if st.session_state.rol == "Admin":
             menu.extend([
                 "👥 Personal",
-                "💰 Nómina",
                 "⚙️ Permisos y Metas",
                 "🕒 Auditoría Horarios"
             ])
@@ -261,14 +262,30 @@ def mostrar_app():
         st.title("📊 Registro Operativo y Bonos")
         st.markdown("Captura encargos por volumen y utiliza la calculadora para inyectar bonos por metas alcanzadas.")
 
-        sucursales = ejecutar_query("SELECT id, nombre FROM sucursales ORDER BY nombre", fetch=True) or []
-        empleados = ejecutar_query("SELECT id, nombre, sucursal_base_id FROM empleados WHERE estatus = 'Activo' ORDER BY nombre", fetch=True) or []
+        # 1. Identificar la sucursal del usuario logueado
+        mis_datos = ejecutar_query("SELECT sucursal_base_id FROM empleados WHERE nombre = %s", (st.session_state.nombre_usuario,), fetch=True)
+        mi_suc_id = mis_datos[0]['sucursal_base_id'] if mis_datos else None
+
+        # 2. Aislamiento de datos según Rol
+        if st.session_state.rol == 'Encargado' and mi_suc_id:
+            sucursales = ejecutar_query("SELECT id, nombre FROM sucursales WHERE id = %s ORDER BY nombre", (mi_suc_id,), fetch=True) or []
+            empleados = ejecutar_query("SELECT id, nombre, sucursal_base_id FROM empleados WHERE estatus = 'Activo' AND (sucursal_base_id = %s OR sucursal_base_id IS NULL) ORDER BY nombre", (mi_suc_id,), fetch=True) or []
+        else:
+            # Los Administradores ven toda la infraestructura
+            sucursales = ejecutar_query("SELECT id, nombre FROM sucursales ORDER BY nombre", fetch=True) or []
+            empleados = ejecutar_query("SELECT id, nombre, sucursal_base_id FROM empleados WHERE estatus = 'Activo' ORDER BY nombre", fetch=True) or []
 
         if not sucursales or not empleados:
             st.warning("⚠️ Faltan datos de sucursales o empleados activos.")
         else:
             mapa_suc = {s['nombre']: s['id'] for s in sucursales}
-            tab_encargos, tab_ajustes, tab_auditoria = st.tabs(["📦 Encargos por Volumen", "🧮 Calculadora de Ajustes", "🔍 Auditoría Financiera"])
+            
+            # Definición dinámica de pestañas según el Rol
+            if st.session_state.rol == 'Admin':
+                tab_encargos, tab_ajustes, tab_auditoria = st.tabs(["📦 Encargos por Volumen", "🧮 Calculadora de Ajustes", "🔍 Auditoría Financiera"])
+            else:
+                tab_encargos, tab_ajustes = st.tabs(["📦 Encargos por Volumen", "🧮 Calculadora de Ajustes"])
+                tab_auditoria = None
 
             # TAB 1: ENCARGOS ESPECIALES (POR VOLUMEN)
             with tab_encargos:
@@ -447,8 +464,9 @@ def mostrar_app():
             # ==========================================
             # TAB 3: AUDITORÍA FINANCIERA (EDICIÓN Y BORRADO)
             # ==========================================
-            with tab_auditoria:
-                st.subheader("🔍 Auditoría y Corrección de Movimientos")
+            if tab_auditoria:
+                with tab_auditoria:
+                    st.subheader("🔍 Auditoría y Corrección de Movimientos")
                 st.markdown("Filtra los registros, visualiza la tabla y selecciona el ID específico para editar o eliminar.")
 
                 import time # Necesario para el feedback visual
@@ -635,7 +653,9 @@ def mostrar_app():
                             exito = ejecutar_query(q_up, (nom_input, est_input, ph_input, tipo_s_input, sf_input, rol_input, final_suc_id, pin_input, fn_input, fi_input, emp_id))
                             
                         if exito is True:
-                            st.toast("Personal actualizado correctamente", icon="✅")
+                            import time
+                            st.success("✅ El registro del colaborador se actualizó correctamente. Recargando...")
+                            time.sleep(1.5)
                             st.rerun()
                         else:
                             st.error(f"Error de base de datos: {exito}")
@@ -675,6 +695,11 @@ def mostrar_app():
 
         if st.button("🚀 Calcular Nómina General", use_container_width=True, type="primary"):
             with st.spinner("Procesando cálculos financieros en la nube..."):
+                # Obtener la sucursal del Encargado
+                mis_datos = ejecutar_query("SELECT sucursal_base_id FROM empleados WHERE nombre = %s", (st.session_state.nombre_usuario,), fetch=True)
+                mi_suc_id = mis_datos[0]['sucursal_base_id'] if mis_datos else None
+
+                # Base de la consulta
                 query_nomina = """
                     SELECT 
                         e.id, 
@@ -690,11 +715,18 @@ def mostrar_app():
                         COALESCE((SELECT SUM(monto) FROM ajustes WHERE empleado_id = e.id AND tipo = 'Descuento' AND fecha >= %s AND fecha <= %s), 0) as descuentos
                     FROM empleados e
                     WHERE e.estatus = 'Activo'
-                    ORDER BY e.nombre
                 """
                 
-                params = (f_ini_str, f_fin_str, fecha_ini, fecha_fin, fecha_ini, fecha_fin, fecha_ini, fecha_fin, fecha_ini, fecha_fin)
-                datos = ejecutar_query(query_nomina, params, fetch=True)
+                params = [f_ini_str, f_fin_str, fecha_ini, fecha_fin, fecha_ini, fecha_fin, fecha_ini, fecha_fin, fecha_ini, fecha_fin]
+                
+                # Inyección de seguridad por Rol (Aislamiento de Sucursal)
+                if st.session_state.rol == 'Encargado' and mi_suc_id:
+                    query_nomina += " AND (e.sucursal_base_id = %s OR e.sucursal_base_id IS NULL)"
+                    params.append(mi_suc_id)
+                    
+                query_nomina += " ORDER BY e.nombre"
+                
+                datos = ejecutar_query(query_nomina, tuple(params), fetch=True)
 
                 if datos:
                     filas = []
@@ -712,6 +744,10 @@ def mostrar_app():
                         bonos_extra = float(d['otros_bonos'])
                         descuentos = float(d['descuentos'])
                         
+                        # DEPURACIÓN: Omitir si es "Por Hora" y no tiene ningún tipo de actividad financiera
+                        if tipo == 'Por Hora' and sueldo_base == 0 and comisiones == 0 and bonos_volumen == 0 and bonos_extra == 0 and descuentos == 0:
+                            continue
+                        
                         neto = sueldo_base + comisiones + bonos_volumen + bonos_extra - descuentos
                         
                         filas.append({
@@ -726,6 +762,10 @@ def mostrar_app():
                             "NETO A PAGAR ($)": neto
                         })
                     
+                    if not filas:
+                        st.warning("No hay datos de nómina para mostrar en este periodo con la plantilla actual de tu sucursal.")
+                        st.stop()
+                        
                     df = pd.DataFrame(filas)
                     total_nomina = df["NETO A PAGAR ($)"].sum()
                     total_bonos = df["Bono Encargos ($)"].sum() + df["Otros Bonos ($)"].sum()
@@ -804,6 +844,8 @@ def mostrar_app():
                             mime='application/pdf',
                             use_container_width=True
                         )
+                else:
+                    st.warning("No se encontraron colaboradores activos.")
         
     elif seleccion == "⚙️ Permisos y Metas":
         st.title("⚙️ Configuración del Negocio")

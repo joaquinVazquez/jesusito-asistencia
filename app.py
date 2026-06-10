@@ -853,6 +853,9 @@ def mostrar_app():
 
         tab_suc, tab_metas, tab_permisos = st.tabs(["🏢 Sucursales", "🎯 Metas y Bonos", "🔐 Permisos"])
 
+        # ==========================================
+        # TAB 1: SUCURSALES
+        # ==========================================
         with tab_suc:
             st.subheader("Gestión de Infraestructura Física")
             with st.form("form_sucursal", clear_on_submit=True):
@@ -884,6 +887,10 @@ def mostrar_app():
             else:
                 st.info("No hay sucursales registradas. Utiliza el formulario superior para crear la primera.")
 
+        
+        # ==========================================
+        # TAB 2: METAS
+        # ==========================================
         with tab_metas:
             st.subheader("📦 Parámetros Globales (Encargos Especiales)")
             
@@ -978,9 +985,38 @@ def mostrar_app():
             else:
                 st.caption("No hay metas establecidas en este momento.")
 
+        # ==========================================
+        # TAB 3: SEGURIDAD Y FEATURE FLAGS
+        # ==========================================
         with tab_permisos:
             st.subheader("Control de Accesos Dinámico")
-            st.info("Módulo en construcción: Aquí inyectaremos los interruptores para activar/desactivar módulos por Rol.")
+            st.markdown("Activa o desactiva los módulos del sistema a nivel global. Los cambios aplican inmediatamente para toda la operación.")
+
+            # 1. Asegurar la existencia de las variables en la BD (Evita errores en primer arranque)
+            for param in ['mod_encargos', 'mod_nomina', 'mod_auditoria']:
+                check = ejecutar_query("SELECT valor FROM config WHERE parametro = %s", (param,), fetch=True)
+                if not check:
+                    ejecutar_query("INSERT INTO config (parametro, valor) VALUES (%s, 'true')", (param,))
+
+            # 2. Leer estado actual
+            configs = ejecutar_query("SELECT parametro, valor FROM config WHERE parametro LIKE 'mod_%'", fetch=True)
+            mapa_flags = {c['parametro']: (c['valor'] == 'true') for c in configs}
+
+            # 3. Renderizar Interruptores
+            with st.container(border=True):
+                mod_enc = st.toggle("📝 Módulo de Registrar Encargos", value=mapa_flags.get('mod_encargos', True))
+                mod_nom = st.toggle("💰 Módulo de Nómina", value=mapa_flags.get('mod_nomina', True))
+                mod_aud = st.toggle("🕒 Módulo de Auditoría de Horarios", value=mapa_flags.get('mod_auditoria', True))
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("💾 Guardar Configuración de Módulos", type="primary", use_container_width=True):
+                    # Transacción de actualización
+                    ejecutar_query("UPDATE config SET valor = %s WHERE parametro = 'mod_encargos'", ('true' if mod_enc else 'false',))
+                    ejecutar_query("UPDATE config SET valor = %s WHERE parametro = 'mod_nomina'", ('true' if mod_nom else 'false',))
+                    ejecutar_query("UPDATE config SET valor = %s WHERE parametro = 'mod_auditoria'", ('true' if mod_aud else 'false',))
+                    
+                    st.success("✅ Configuración de infraestructura actualizada. Recargando entorno...")
+                    import time; time.sleep(1.5); st.rerun()
 
     elif seleccion == "🕒 Auditoría Horarios":
         st.title("🕒 Auditoría y Corrección de Horarios")

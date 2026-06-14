@@ -1,10 +1,22 @@
-import psycopg2
-from psycopg2.extras import RealDictCursor
 import os
+import psycopg2
+import streamlit as st
 from dotenv import load_dotenv
 
 # Cargar variables de entorno
 load_dotenv()
+
+def obtener_credencial(clave):
+    """
+    Resuelve la credencial evaluando primero el entorno de producción
+    y haciendo fallback al entorno local (.env).
+    """
+    try:
+        # Intenta extraer de los Secrets de Streamlit Cloud
+        return st.secrets[clave]
+    except (FileNotFoundError, KeyError):
+        # Si falla (entorno local), extrae del archivo .env
+        return os.getenv(clave)
 
 def get_db_connection():
     # Obtenemos la cadena de conexión completa

@@ -4,8 +4,9 @@ from src.models.db_manager import ejecutar_query
 import pandas as pd
 from fpdf import FPDF
 import io
+import time
 
-# 1. CONFIGURACIÓN BASE DE LA PÁGINA (Debe ser la primera instrucción)
+# 1. CONFIGURACIÓN BASE DE LA PÁGINA
 st.set_page_config(page_title="Jesusito ERP V3", page_icon="🍰", layout="wide")
 
 # 2. GESTIÓN DE ESTADO (MEMORIA DE SESIÓN)
@@ -13,6 +14,9 @@ if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
     st.session_state.rol = None
     st.session_state.nombre_usuario = None
+
+if 'calc_extras' not in st.session_state:
+    st.session_state.calc_extras = 0
 
 # 3. PATRÓN KIOSCO PÚBLICO Y LOGIN LATERAL
 def mostrar_kiosco_publico():
@@ -112,7 +116,8 @@ def mostrar_kiosco_publico():
                             if exito is True:
                                 hora_str = datetime.datetime.now().strftime('%H:%M:%S')
                                 st.success(f"¡Excelente turno, {emp_sel}! Tu entrada fue registrada exitosamente a las {hora_str}. ✅")
-                                import time; time.sleep(2.5); st.rerun()
+                                time.sleep(2.5)
+                                st.rerun()
 
                 with col2:
                     if st.button("🛑 MARCAR SALIDA", use_container_width=True):
@@ -125,7 +130,8 @@ def mostrar_kiosco_publico():
                             if exito is True:
                                 hora_str = datetime.datetime.now().strftime('%H:%M:%S')
                                 st.success(f"¡Buen descanso, {emp_sel}! Tu salida fue registrada exitosamente a las {hora_str}. 🛑")
-                                import time; time.sleep(2.5); st.rerun()
+                                time.sleep(2.5)
+                                st.rerun()
 
 # 4. ESTRUCTURA PRINCIPAL (RBAC)
 def mostrar_app():
@@ -136,14 +142,11 @@ def mostrar_app():
         st.caption(f"Rol: {st.session_state.rol}")
         st.markdown("---")
             
-        # Construcción unificada del menú dinámico
         menu = ["⏱️ Reloj Checador"]
 
-        # Módulos compartidos entre Admin y Encargado
         if st.session_state.rol in ["Admin", "Encargado"]:
             menu.extend(["📝 Registrar Encargos", "💰 Nómina"])
 
-        # Módulos exclusivos de la Dirección General (Admin)
         if st.session_state.rol == "Admin":
             menu.extend([
                 "👥 Personal",
@@ -151,7 +154,6 @@ def mostrar_app():
                 "🕒 Auditoría Horarios"
             ])
 
-        # Renderizado único con identificador explícito de control
         seleccion = st.radio("Navegación", menu, key="menu_principal_seleccion")
         
         st.markdown("---")
@@ -163,12 +165,10 @@ def mostrar_app():
     if seleccion == "⏱️ Reloj Checador":
         st.title("⏱️ Registro de Asistencia")
 
-        # 1. Obtener metadatos del usuario logueado en tiempo real
         mis_datos = ejecutar_query("SELECT id, sucursal_base_id FROM empleados WHERE nombre = %s", (st.session_state.nombre_usuario,), fetch=True)
         mi_id = mis_datos[0]['id'] if mis_datos else None
         mi_suc_id = mis_datos[0]['sucursal_base_id'] if mis_datos else None
 
-        # 2. Cargar Sucursales
         sucursales = ejecutar_query("SELECT id, nombre FROM sucursales ORDER BY id", fetch=True) or []
         
         if not sucursales:
@@ -177,14 +177,10 @@ def mostrar_app():
             mapa_suc = {s['nombre']: s['id'] for s in sucursales}
             
             with st.container(border=True):
-                # ==========================================
-                # FLUJO A: AUTOSERVICIO (COLABORADOR)
-                # ==========================================
                 if st.session_state.rol == 'Colaborador':
                     st.markdown(f"### 👋 Hola, **{st.session_state.nombre_usuario}**")
                     st.markdown("Verifica tu ubicación actual y registra tu turno.")
                     
-                    # Preseleccionar su sucursal base automáticamente
                     idx_suc = 0
                     if mi_suc_id and mi_suc_id in mapa_suc.values():
                         idx_suc = list(mapa_suc.values()).index(mi_suc_id)
@@ -192,13 +188,9 @@ def mostrar_app():
                     suc_sel = st.selectbox("📍 Ubicación de la Terminal", list(mapa_suc.keys()), index=idx_suc)
                     suc_id = mapa_suc[suc_sel]
                     
-                    # Bloqueamos la identidad
                     emp_id = mi_id
                     emp_sel = st.session_state.nombre_usuario
 
-                # ==========================================
-                # FLUJO B: MODO KIOSCO (ADMIN / ENCARGADO)
-                # ==========================================
                 else:
                     st.markdown("### 🏢 Modo Kiosco (Administración)")
                     st.markdown("Tienes privilegios para registrar la asistencia de cualquier elemento de la plantilla.")
@@ -226,9 +218,6 @@ def mostrar_app():
                         emp_sel = st.selectbox("👤 Nombre del Colaborador", list(mapa_emp.keys()))
                         emp_id = mapa_emp[emp_sel]
 
-                # ==========================================
-                # MOTOR TRANSACCIONAL (Común para ambos flujos)
-                # ==========================================
                 if emp_id:
                     st.markdown("<br><br>", unsafe_allow_html=True)
                     col1, col2 = st.columns(2)
@@ -262,16 +251,13 @@ def mostrar_app():
         st.title("📊 Registro Operativo y Bonos")
         st.markdown("Captura encargos por volumen y utiliza la calculadora para inyectar bonos por metas alcanzadas.")
 
-        # 1. Identificar la sucursal del usuario logueado
         mis_datos = ejecutar_query("SELECT sucursal_base_id FROM empleados WHERE nombre = %s", (st.session_state.nombre_usuario,), fetch=True)
         mi_suc_id = mis_datos[0]['sucursal_base_id'] if mis_datos else None
 
-        # 2. Aislamiento de datos según Rol
         if st.session_state.rol == 'Encargado' and mi_suc_id:
             sucursales = ejecutar_query("SELECT id, nombre FROM sucursales WHERE id = %s ORDER BY nombre", (mi_suc_id,), fetch=True) or []
-            empleados = ejecutar_query("SELECT id, nombre, sucursal_base_id FROM empleados WHERE estatus = 'Activo' AND (sucursal_base_id = %s OR sucursal_base_id IS NULL) ORDER BY nombre", (mi_suc_id,), fetch=True) or []
+            empleados = ejecutar_query("SELECT id, nombre, sucursal_base_id FROM empleados WHERE estatus = 'Activo' AND sucursal_base_id = %s ORDER BY nombre", (mi_suc_id,), fetch=True) or []
         else:
-            # Los Administradores ven toda la infraestructura
             sucursales = ejecutar_query("SELECT id, nombre FROM sucursales ORDER BY nombre", fetch=True) or []
             empleados = ejecutar_query("SELECT id, nombre, sucursal_base_id FROM empleados WHERE estatus = 'Activo' ORDER BY nombre", fetch=True) or []
 
@@ -280,14 +266,12 @@ def mostrar_app():
         else:
             mapa_suc = {s['nombre']: s['id'] for s in sucursales}
             
-            # Definición dinámica de pestañas según el Rol
             if st.session_state.rol == 'Admin':
                 tab_encargos, tab_ajustes, tab_auditoria = st.tabs(["📦 Encargos por Volumen", "🧮 Calculadora de Ajustes", "🔍 Auditoría Financiera"])
             else:
                 tab_encargos, tab_ajustes = st.tabs(["📦 Encargos por Volumen", "🧮 Calculadora de Ajustes"])
                 tab_auditoria = None
 
-            # TAB 1: ENCARGOS ESPECIALES (POR VOLUMEN)
             with tab_encargos:
                 st.subheader("Registro de Bonos por Volumen de Pasteles")
                 
@@ -300,7 +284,7 @@ def mostrar_app():
                     suc_sel_enc = st.selectbox("1. Sucursal", list(mapa_suc.keys()), key="s_enc")
                     
                     suc_enc_id = mapa_suc[suc_sel_enc]
-                    emp_enc_filtrados = [e['nombre'] for e in empleados if e['sucursal_base_id'] == suc_enc_id or e['sucursal_base_id'] is None]
+                    emp_enc_filtrados = [e['nombre'] for e in empleados if e['sucursal_base_id'] == suc_enc_id]
                     if not emp_enc_filtrados: emp_enc_filtrados = ["Sin personal"]
                     
                     vendedor_sel = st.selectbox("2. Vendedora", emp_enc_filtrados, key="v_enc")
@@ -333,11 +317,7 @@ def mostrar_app():
                         else:
                             st.error(f"Error BD: {exito}")
 
-            # TAB 2: AJUSTES MANUALES Y CALCULADORA
             with tab_ajustes:
-                if 'calc_extras' not in st.session_state:
-                    st.session_state.calc_extras = 0
-
                 st.subheader("⚖️ Ajustes Manuales Directos (Prioridad Operativa)")
                 st.markdown("Inyección inmediata de bonos o descuentos a la nómina.")
                 
@@ -356,7 +336,7 @@ def mostrar_app():
                         emp_manual_filtrados = [e['nombre'] for e in empleados]
                     else:
                         s_id = mapa_suc[suc_man_sel]
-                        emp_manual_filtrados = [e['nombre'] for e in empleados if e['sucursal_base_id'] == s_id or e['sucursal_base_id'] is None]
+                        emp_manual_filtrados = [e['nombre'] for e in empleados if e['sucursal_base_id'] == s_id]
                         
                     if not emp_manual_filtrados: emp_manual_filtrados = ["Sin personal"]
                     
@@ -383,7 +363,7 @@ def mostrar_app():
                     fecha_meta = c_calc2.date_input("Fecha del Cierre", datetime.date.today(), key="f_calc")
                     
                     suc_calc_id = mapa_suc[suc_sel_calc]
-                    emp_calc_filtrados = [e['nombre'] for e in empleados if e['sucursal_base_id'] == suc_calc_id or e['sucursal_base_id'] is None]
+                    emp_calc_filtrados = [e['nombre'] for e in empleados if e['sucursal_base_id'] == suc_calc_id]
                     if not emp_calc_filtrados: emp_calc_filtrados = ["Sin personal"]
                     
                     st.markdown("**1. Distribución del Equipo**")
@@ -461,91 +441,75 @@ def mostrar_app():
                         else:
                             st.warning(f"La venta (${venta_real:,.2f}) no ha superado la meta (${meta_obj:,.2f}). No hay bonos que repartir.")
         
-            # ==========================================
-            # TAB 3: AUDITORÍA FINANCIERA (EDICIÓN Y BORRADO)
-            # ==========================================
             if tab_auditoria:
                 with tab_auditoria:
                     st.subheader("🔍 Auditoría y Corrección de Movimientos")
-                st.markdown("Filtra los registros, visualiza la tabla y selecciona el ID específico para editar o eliminar.")
+                    st.markdown("Filtra los registros, visualiza la tabla y selecciona el ID específico para editar o eliminar.")
 
-                import time # Necesario para el feedback visual
+                    with st.container(border=True):
+                        f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+                        aud_f_ini = f_col1.date_input("Desde", datetime.date.today() - datetime.timedelta(days=7), key="aud_ini")
+                        aud_f_fin = f_col2.date_input("Hasta", datetime.date.today(), key="aud_fin")
+                        aud_tipo = f_col3.selectbox("Tipo de Movimiento", ["Todos", "Bono", "Descuento"])
+                        
+                        opciones_emp = ["Todos"] + [e['nombre'] for e in empleados]
+                        aud_emp = f_col4.selectbox("Colaborador", opciones_emp)
 
-                # 1. Contenedor de Filtros (UI)
-                with st.container(border=True):
-                    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
-                    aud_f_ini = f_col1.date_input("Desde", datetime.date.today() - datetime.timedelta(days=7), key="aud_ini")
-                    aud_f_fin = f_col2.date_input("Hasta", datetime.date.today(), key="aud_fin")
+                    query_base = """
+                        SELECT a.id, e.nombre as empleado, a.tipo, a.monto, a.fecha, a.motivo
+                        FROM ajustes a
+                        JOIN empleados e ON a.empleado_id = e.id
+                        WHERE a.fecha >= %s AND a.fecha <= %s
+                    """
+                    params_aud = [aud_f_ini, aud_f_fin]
+
+                    if aud_tipo != "Todos":
+                        query_base += " AND a.tipo = %s"
+                        params_aud.append(aud_tipo)
                     
-                    aud_tipo = f_col3.selectbox("Tipo de Movimiento", ["Todos", "Bono", "Descuento"])
-                    
-                    # Aprovechamos la variable 'empleados' ya existente en el scope superior
-                    opciones_emp = ["Todos"] + [e['nombre'] for e in empleados]
-                    aud_emp = f_col4.selectbox("Colaborador", opciones_emp)
+                    if aud_emp != "Todos":
+                        query_base += " AND e.nombre = %s"
+                        params_aud.append(aud_emp)
 
-                # 2. Motor de Query Dinámica
-                query_base = """
-                    SELECT a.id, e.nombre as empleado, a.tipo, a.monto, a.fecha, a.motivo
-                    FROM ajustes a
-                    JOIN empleados e ON a.empleado_id = e.id
-                    WHERE a.fecha >= %s AND a.fecha <= %s
-                """
-                params_aud = [aud_f_ini, aud_f_fin]
+                    query_base += " ORDER BY a.fecha DESC, a.id DESC"
+                    historial = ejecutar_query(query_base, tuple(params_aud), fetch=True)
 
-                if aud_tipo != "Todos":
-                    query_base += " AND a.tipo = %s"
-                    params_aud.append(aud_tipo)
-                
-                if aud_emp != "Todos":
-                    query_base += " AND e.nombre = %s"
-                    params_aud.append(aud_emp)
+                    if historial:
+                        df_hist = pd.DataFrame(historial)
+                        df_visual_hist = df_hist.copy()
+                        df_visual_hist['monto'] = df_visual_hist['monto'].apply(lambda x: f"${x:,.2f}")
+                        st.dataframe(df_visual_hist, use_container_width=True, hide_index=True)
 
-                query_base += " ORDER BY a.fecha DESC, a.id DESC"
-                
-                historial = ejecutar_query(query_base, tuple(params_aud), fetch=True)
+                        st.markdown("### ✏️ Panel de Corrección")
+                        opciones_hist = [f"ID: {r['id']} | {r['empleado']} | {r['fecha']}" for r in historial]
+                        reg_edit_sel = st.selectbox("Selecciona el movimiento a corregir:", opciones_hist)
 
-                # 3. Renderizado y Edición
-                if historial:
-                    df_hist = pd.DataFrame(historial)
-                    df_visual_hist = df_hist.copy()
-                    df_visual_hist['monto'] = df_visual_hist['monto'].apply(lambda x: f"${x:,.2f}")
-                    st.dataframe(df_visual_hist, use_container_width=True, hide_index=True)
+                        reg_id = int(reg_edit_sel.split(" |")[0].replace("ID: ", ""))
+                        reg_datos = next(r for r in historial if r['id'] == reg_id)
 
-                    st.markdown("### ✏️ Panel de Corrección")
-                    
-                    # Selector limpio: Solo muestra ID, Nombre y Fecha gracias a los filtros previos
-                    opciones_hist = [f"ID: {r['id']} | {r['empleado']} | {r['fecha']}" for r in historial]
-                    reg_edit_sel = st.selectbox("Selecciona el movimiento a corregir:", opciones_hist)
+                        with st.form("form_edit_ajuste"):
+                            c_ed1, c_ed2 = st.columns(2)
+                            nueva_fecha = c_ed1.date_input("Corregir Fecha", reg_datos['fecha'])
+                            nuevo_monto = c_ed2.number_input("Corregir Monto ($)", value=float(reg_datos['monto']), step=50.0)
+                            nuevo_motivo = st.text_input("Corregir Motivo / Detalles", value=reg_datos['motivo'])
 
-                    # Aislamiento del ID para operaciones SQL
-                    reg_id = int(reg_edit_sel.split(" |")[0].replace("ID: ", ""))
-                    reg_datos = next(r for r in historial if r['id'] == reg_id)
+                            col_btn1, col_btn2 = st.columns(2)
+                            guardar = col_btn1.form_submit_button("💾 Actualizar Registro", type="primary", use_container_width=True)
+                            eliminar = col_btn2.form_submit_button("🗑️ Eliminar Definitivamente", use_container_width=True)
 
-                    with st.form("form_edit_ajuste"):
-                        c_ed1, c_ed2 = st.columns(2)
-                        nueva_fecha = c_ed1.date_input("Corregir Fecha", reg_datos['fecha'])
-                        nuevo_monto = c_ed2.number_input("Corregir Monto ($)", value=float(reg_datos['monto']), step=50.0)
+                            if guardar:
+                                ejecutar_query("UPDATE ajustes SET fecha = %s, monto = %s, motivo = %s WHERE id = %s", (nueva_fecha, nuevo_monto, nuevo_motivo, reg_id))
+                                st.success("✅ Transacción actualizada correctamente. Recargando el sistema...")
+                                time.sleep(1.5)
+                                st.rerun()
 
-                        nuevo_motivo = st.text_input("Corregir Motivo / Detalles", value=reg_datos['motivo'])
-
-                        col_btn1, col_btn2 = st.columns(2)
-                        guardar = col_btn1.form_submit_button("💾 Actualizar Registro", type="primary", use_container_width=True)
-                        eliminar = col_btn2.form_submit_button("🗑️ Eliminar Definitivamente", use_container_width=True)
-
-                        # 4. Lógica Transaccional con Feedback Visual
-                        if guardar:
-                            ejecutar_query("UPDATE ajustes SET fecha = %s, monto = %s, motivo = %s WHERE id = %s", (nueva_fecha, nuevo_monto, nuevo_motivo, reg_id))
-                            st.success("✅ Transacción actualizada correctamente. Recargando el sistema...")
-                            time.sleep(1.5) # Congela el hilo para permitir el renderizado del mensaje
-                            st.rerun()
-
-                        if eliminar:
-                            ejecutar_query("DELETE FROM ajustes WHERE id = %s", (reg_id,))
-                            st.warning("⚠️ Transacción eliminada de la base de datos.")
-                            time.sleep(1.5)
-                            st.rerun()
-                else:
-                    st.info("No hay movimientos financieros que coincidan con los filtros aplicados.")
+                            if eliminar:
+                                ejecutar_query("DELETE FROM ajustes WHERE id = %s", (reg_id,))
+                                st.warning("⚠️ Transacción eliminada de la base de datos.")
+                                time.sleep(1.5)
+                                st.rerun()
+                    else:
+                        st.info("No hay movimientos financieros que coincidan con los filtros aplicados.")
 
     elif seleccion == "👥 Personal":
         st.title("👥 Gestión de Personal")
@@ -574,21 +538,17 @@ def mostrar_app():
         with col2:
             st.subheader("Ficha Técnica del Colaborador")
             with st.form("form_personal", clear_on_submit=False):
-                # 1. Extracción de datos básicos
                 def_nom = datos_edit['nombre'] if datos_edit else ""
                 def_est = datos_edit['estatus'] if datos_edit and datos_edit['estatus'] else "Activo"
                 def_rol = datos_edit['rol'] if datos_edit and datos_edit['rol'] in ["Colaborador", "Encargado", "Admin"] else "Colaborador"
                 def_tipo_s = datos_edit['tipo_sueldo'] if datos_edit and datos_edit['tipo_sueldo'] in ["Por Hora", "Fijo"] else "Por Hora"
                 
-                # 2. Extracción de Fechas
                 def_fn = datos_edit['fecha_nacimiento'] if datos_edit and datos_edit['fecha_nacimiento'] else None
                 def_fi = datos_edit['fecha_ingreso'] if datos_edit and datos_edit['fecha_ingreso'] else None
                 
-                # 3. Extracción de montos financieros
                 def_ph = float(datos_edit['pago_hora']) if datos_edit and datos_edit['pago_hora'] else 0.0
                 def_sf = float(datos_edit['sueldo_fijo_semanal']) if datos_edit and datos_edit['sueldo_fijo_semanal'] else 0.0
                 
-                # 4. RECUPERACIÓN DE idx_suc
                 def_suc_id = datos_edit['sucursal_base_id'] if datos_edit else None
                 def_suc_nombre = "Rotación General (Ninguna)"
                 if def_suc_id:
@@ -601,7 +561,6 @@ def mostrar_app():
                 except ValueError:
                     idx_suc = 0
 
-                # --- CAMPOS DE INTERFAZ ---
                 nom_input = st.text_input("Nombre Completo", def_nom)
                 
                 c1, c2 = st.columns(2)
@@ -610,14 +569,12 @@ def mostrar_app():
                 
                 suc_input = st.selectbox("📍 Sucursal Base (Filtro para Reloj Checador)", opciones_suc, index=idx_suc)
                 
-                # --- CAMPOS DE FECHA ---
                 st.markdown("---")
                 st.markdown("**Fechas Importantes (Kiosco / Celebraciones)**")
                 cf1, cf2 = st.columns(2)
                 fn_input = cf1.date_input("Fecha de Nacimiento", value=def_fn, min_value=datetime.date(1950, 1, 1), max_value=datetime.date.today())
                 fi_input = cf2.date_input("Fecha de Ingreso", value=def_fi, min_value=datetime.date(2010, 1, 1), max_value=datetime.date.today())
 
-                # --- ESQUEMA FINANCIERO ---
                 st.markdown("---")
                 st.markdown("**Esquema Financiero**")
                 c3, c4 = st.columns(2)
@@ -626,14 +583,12 @@ def mostrar_app():
                 ph_input = c4.number_input("Pago por Hora ($)", min_value=0.0, value=def_ph, step=5.0)
                 sf_input = c4.number_input("Sueldo Fijo Semanal ($)", min_value=0.0, value=def_sf, step=50.0)
                 
-                # --- PIN ---
                 st.markdown("---")
                 pin_input = st.text_input("PIN de Acceso (Solo Admin/Encargados)", 
                                          value=datos_edit['pin'] if datos_edit and datos_edit['pin'] else "", 
                                          type="password", 
                                          help="Clave numérica para acceder a módulos administrativos.")
                 
-                # --- BOTÓN Y LÓGICA DE GUARDADO ---
                 st.markdown("---")
                 submit = st.form_submit_button("💾 Guardar Información de Personal", type="primary", use_container_width=True)
                 
@@ -653,14 +608,12 @@ def mostrar_app():
                             exito = ejecutar_query(q_up, (nom_input, est_input, ph_input, tipo_s_input, sf_input, rol_input, final_suc_id, pin_input, fn_input, fi_input, emp_id))
                             
                         if exito is True:
-                            import time
                             st.success("✅ El registro del colaborador se actualizó correctamente. Recargando...")
                             time.sleep(1.5)
                             st.rerun()
                         else:
                             st.error(f"Error de base de datos: {exito}")
                             
-        # --- TABLA DE PLANTILLA ---
         st.markdown("---")
         st.subheader("📋 Plantilla Registrada")
         q_view = """
@@ -695,11 +648,9 @@ def mostrar_app():
 
         if st.button("🚀 Calcular Nómina General", use_container_width=True, type="primary"):
             with st.spinner("Procesando cálculos financieros en la nube..."):
-                # Obtener la sucursal del Encargado
                 mis_datos = ejecutar_query("SELECT sucursal_base_id FROM empleados WHERE nombre = %s", (st.session_state.nombre_usuario,), fetch=True)
                 mi_suc_id = mis_datos[0]['sucursal_base_id'] if mis_datos else None
 
-                # Base de la consulta
                 query_nomina = """
                     SELECT 
                         e.id, 
@@ -719,9 +670,8 @@ def mostrar_app():
                 
                 params = [f_ini_str, f_fin_str, fecha_ini, fecha_fin, fecha_ini, fecha_fin, fecha_ini, fecha_fin, fecha_ini, fecha_fin]
                 
-                # Inyección de seguridad por Rol (Aislamiento de Sucursal)
                 if st.session_state.rol == 'Encargado' and mi_suc_id:
-                    query_nomina += " AND (e.sucursal_base_id = %s OR e.sucursal_base_id IS NULL)"
+                    query_nomina += " AND e.sucursal_base_id = %s"
                     params.append(mi_suc_id)
                     
                 query_nomina += " ORDER BY e.nombre"
@@ -744,7 +694,6 @@ def mostrar_app():
                         bonos_extra = float(d['otros_bonos'])
                         descuentos = float(d['descuentos'])
                         
-                        # DEPURACIÓN: Omitir si es "Por Hora" y no tiene ningún tipo de actividad financiera
                         if tipo == 'Por Hora' and sueldo_base == 0 and comisiones == 0 and bonos_volumen == 0 and bonos_extra == 0 and descuentos == 0:
                             continue
                         
@@ -853,9 +802,6 @@ def mostrar_app():
 
         tab_suc, tab_metas, tab_permisos = st.tabs(["🏢 Sucursales", "🎯 Metas y Bonos", "🔐 Permisos"])
 
-        # ==========================================
-        # TAB 1: SUCURSALES
-        # ==========================================
         with tab_suc:
             st.subheader("Gestión de Infraestructura Física")
             with st.form("form_sucursal", clear_on_submit=True):
@@ -887,10 +833,6 @@ def mostrar_app():
             else:
                 st.info("No hay sucursales registradas. Utiliza el formulario superior para crear la primera.")
 
-        
-        # ==========================================
-        # TAB 2: METAS
-        # ==========================================
         with tab_metas:
             st.subheader("📦 Parámetros Globales (Encargos Especiales)")
             
@@ -929,12 +871,12 @@ def mostrar_app():
                 st.markdown("---")
                 c1, c2, c3, c4 = st.columns(4)
                 
-                opciones_suc = list(mapa_suc_meta.keys()) if mapa_suc_meta else ["Sin sucursales"]
-                suc_sel = c1.selectbox("Sucursal Objetivo", opciones_suc)
+                opciones_suc_lista = list(mapa_suc_meta.keys()) if mapa_suc_meta else ["Sin sucursales"]
+                suc_sel_box = c1.selectbox("Sucursal Objetivo", opciones_suc_lista)
                 
                 meta_input = c2.number_input("Venta Meta ($)", min_value=0.0, step=1000.0)
-                pct_enc = c3.number_input("% Encargada", min_value=0.0, step=0.5, format="%.2f")
-                pct_sup = c4.number_input("% Suplente", min_value=0.0, step=0.5, format="%.2f")
+                pct_enc_val = c3.number_input("% Encargada", min_value=0.0, step=0.5, format="%.2f")
+                pct_sup_val = c4.number_input("% Suplente", min_value=0.0, step=0.5, format="%.2f")
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 btn_meta = st.form_submit_button("➕ Asignar Regla", use_container_width=True, type="primary")
@@ -943,7 +885,7 @@ def mostrar_app():
                     if periodo_sel == "Evento Festivo" and not evento_input.strip():
                         st.error("Debes especificar el nombre del evento.")
                     else:
-                        suc_id = mapa_suc_meta[suc_sel]
+                        suc_id = mapa_suc_meta[suc_sel_box]
                         nombre_ev_final = evento_input.strip() if periodo_sel == "Evento Festivo" else None
                         
                         q_desact = "UPDATE reglas_bonos SET activo = FALSE WHERE sucursal_id = %s AND periodicidad = %s"
@@ -953,10 +895,10 @@ def mostrar_app():
                             INSERT INTO reglas_bonos (sucursal_id, venta_meta, porcentaje_encargada, porcentaje_suplente, periodicidad, nombre_evento, activo) 
                             VALUES (%s, %s, %s, %s, %s, %s, TRUE)
                         """
-                        exito = ejecutar_query(q_ins, (suc_id, meta_input, pct_enc, pct_sup, periodo_sel, nombre_ev_final))
+                        exito = ejecutar_query(q_ins, (suc_id, meta_input, pct_enc_val, pct_sup_val, periodo_sel, nombre_ev_final))
                         
                         if exito is True:
-                            st.toast(f"Regla {periodo_sel} activada para {suc_sel}", icon="✅")
+                            st.toast(f"Regla {periodo_sel} activada para {suc_sel_box}", icon="✅")
                             st.rerun()
                         else:
                             st.error(f"Error de base de datos: {exito}")
@@ -983,40 +925,34 @@ def mostrar_app():
                 df_reglas["% Sup."] = df_reglas["% Sup."].apply(lambda x: f"{x}%")
                 st.dataframe(df_reglas, use_container_width=True, hide_index=True)
             else:
-                st.caption("No hay metas establecidas en este momento.")
+                st.caption("No hay metas establecidas in este momento.")
 
-        # ==========================================
-        # TAB 3: SEGURIDAD Y FEATURE FLAGS
-        # ==========================================
         with tab_permisos:
             st.subheader("Control de Accesos Dinámico")
             st.markdown("Activa o desactiva los módulos del sistema a nivel global. Los cambios aplican inmediatamente para toda la operación.")
 
-            # 1. Asegurar la existencia de las variables en la BD (Evita errores en primer arranque)
             for param in ['mod_encargos', 'mod_nomina', 'mod_auditoria']:
                 check = ejecutar_query("SELECT valor FROM config WHERE parametro = %s", (param,), fetch=True)
                 if not check:
                     ejecutar_query("INSERT INTO config (parametro, valor) VALUES (%s, 'true')", (param,))
 
-            # 2. Leer estado actual
             configs = ejecutar_query("SELECT parametro, valor FROM config WHERE parametro LIKE 'mod_%'", fetch=True)
             mapa_flags = {c['parametro']: (c['valor'] == 'true') for c in configs}
 
-            # 3. Renderizar Interruptores
             with st.container(border=True):
-                mod_enc = st.toggle("📝 Módulo de Registrar Encargos", value=mapa_flags.get('mod_encargos', True))
-                mod_nom = st.toggle("💰 Módulo de Nómina", value=mapa_flags.get('mod_nomina', True))
-                mod_aud = st.toggle("🕒 Módulo de Auditoría de Horarios", value=mapa_flags.get('mod_auditoria', True))
+                mod_enc_toggle = st.toggle("📝 Módulo de Registrar Encargos", value=mapa_flags.get('mod_encargos', True))
+                mod_nom_toggle = st.toggle("💰 Módulo de Nómina", value=mapa_flags.get('mod_nomina', True))
+                mod_aud_toggle = st.toggle("🕒 Módulo de Auditoría de Horarios", value=mapa_flags.get('mod_auditoria', True))
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 if st.button("💾 Guardar Configuración de Módulos", type="primary", use_container_width=True):
-                    # Transacción de actualización
-                    ejecutar_query("UPDATE config SET valor = %s WHERE parametro = 'mod_encargos'", ('true' if mod_enc else 'false',))
-                    ejecutar_query("UPDATE config SET valor = %s WHERE parametro = 'mod_nomina'", ('true' if mod_nom else 'false',))
-                    ejecutar_query("UPDATE config SET valor = %s WHERE parametro = 'mod_auditoria'", ('true' if mod_aud else 'false',))
+                    ejecutar_query("UPDATE config SET valor = %s WHERE parametro = 'mod_encargos'", ('true' if mod_enc_toggle else 'false',))
+                    ejecutar_query("UPDATE config SET valor = %s WHERE parametro = 'mod_nomina'", ('true' if mod_nom_toggle else 'false',))
+                    ejecutar_query("UPDATE config SET valor = %s WHERE parametro = 'mod_auditoria'", ('true' if mod_aud_toggle else 'false',))
                     
                     st.success("✅ Configuración de infraestructura actualizada. Recargando entorno...")
-                    import time; time.sleep(1.5); st.rerun()
+                    time.sleep(1.5)
+                    st.rerun()
 
     elif seleccion == "🕒 Auditoría Horarios":
         st.title("🕒 Auditoría y Corrección de Horarios")

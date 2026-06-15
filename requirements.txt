@@ -1,6 +1,6 @@
 streamlit
 psycopg2-binary
 python-dotenv
-fpdf
+fpdf2
 pandas
 openpyxl

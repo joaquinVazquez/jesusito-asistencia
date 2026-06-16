@@ -5,6 +5,7 @@ import pandas as pd
 from fpdf import FPDF
 import io
 import time
+from zoneinfo import ZoneInfo
 
 # 1. CONFIGURACIÓN BASE DE LA PÁGINA
 st.set_page_config(page_title="Jesusito ERP V3", page_icon="🍰", layout="wide")
@@ -107,31 +108,31 @@ def mostrar_kiosco_publico():
                 col1, col2 = st.columns(2)
 
                 with col1:
-                    if st.button("✅ MARCAR ENTRADA", use_container_width=True, type="primary"):
-                        check = ejecutar_query("SELECT id FROM asistencia WHERE empleado_id = %s AND salida IS NULL", (emp_id,), fetch=True)
-                        if check:
-                            st.error(f"⚠️ {emp_sel}, ya tienes un turno abierto. Marca tu salida primero.")
-                        else:
-                            exito = ejecutar_query("INSERT INTO asistencia (empleado_id, sucursal_id, entrada, tipo_registro) VALUES (%s, %s, NOW(), 'Normal')", (emp_id, suc_id))
-                            if exito is True:
-                                hora_str = datetime.datetime.now().strftime('%H:%M:%S')
-                                st.success(f"¡Excelente turno, {emp_sel}! Tu entrada fue registrada exitosamente a las {hora_str}. ✅")
-                                time.sleep(2.5)
-                                st.rerun()
+                        if st.button("✅ MARCAR ENTRADA", use_container_width=True, type="primary"):
+                            check = ejecutar_query("SELECT id FROM asistencia WHERE empleado_id = %s AND salida IS NULL", (emp_id,), fetch=True)
+                            if check:
+                                st.error(f"⚠️ {emp_sel}, ya tienes un turno abierto. Marca tu salida primero.")
+                            else:
+                                hora_local = datetime.datetime.now(ZoneInfo("America/Mexico_City"))
+                                exito = ejecutar_query("INSERT INTO asistencia (empleado_id, sucursal_id, entrada, tipo_registro) VALUES (%s, %s, %s, 'Normal')", (emp_id, suc_id, hora_local))
+                                if exito is True:
+                                    st.success(f"Entrada registrada para {emp_sel} a las {hora_local.strftime('%H:%M:%S')}")
+                                else:
+                                    st.error("Fallo de comunicación con el servidor.")
 
                 with col2:
-                    if st.button("🛑 MARCAR SALIDA", use_container_width=True):
-                        check = ejecutar_query("SELECT id FROM asistencia WHERE empleado_id = %s AND salida IS NULL ORDER BY entrada DESC LIMIT 1", (emp_id,), fetch=True)
-                        if not check:
-                            st.error(f"⚠️ {emp_sel}, no tienes un turno abierto para marcar salida.")
-                        else:
-                            reg_id = check[0]['id']
-                            exito = ejecutar_query("UPDATE asistencia SET salida = NOW() WHERE id = %s", (reg_id,))
-                            if exito is True:
-                                hora_str = datetime.datetime.now().strftime('%H:%M:%S')
-                                st.success(f"¡Buen descanso, {emp_sel}! Tu salida fue registrada exitosamente a las {hora_str}. 🛑")
-                                time.sleep(2.5)
-                                st.rerun()
+                        if st.button("🛑 MARCAR SALIDA", use_container_width=True):
+                            check = ejecutar_query("SELECT id FROM asistencia WHERE empleado_id = %s AND salida IS NULL ORDER BY entrada DESC LIMIT 1", (emp_id,), fetch=True)
+                            if not check:
+                                st.error(f"⚠️ {emp_sel}, no tienes un turno abierto para marcar salida.")
+                            else:
+                                reg_id = check[0]['id']
+                                hora_local = datetime.datetime.now(ZoneInfo("America/Mexico_City"))
+                                exito = ejecutar_query("UPDATE asistencia SET salida = %s WHERE id = %s", (hora_local, reg_id))
+                                if exito is True:
+                                    st.success(f"Salida registrada para {emp_sel} a las {hora_local.strftime('%H:%M:%S')}")
+                                else:
+                                    st.error("Fallo de comunicación con el servidor.")
 
 # 4. ESTRUCTURA PRINCIPAL (RBAC)
 def mostrar_app():

@@ -113,12 +113,19 @@ def mostrar_kiosco_publico():
                         if check:
                             st.error(f"⚠️ {emp_sel}, ya tienes un turno abierto. Marca tu salida primero.")
                         else:
-                            # Inyección forzada de zona horaria CST
+                            # 1. Obtenemos la hora local
                             hora_local = datetime.datetime.now(ZoneInfo("America/Mexico_City"))
-                            exito = ejecutar_query("INSERT INTO asistencia (empleado_id, sucursal_id, entrada, tipo_registro) VALUES (%s, %s, %s, 'Normal')", (emp_id, suc_id, hora_local))
+                            
+                            # 2. PARCHE CRÍTICO: Casteo estricto a String (YYYY-MM-DD HH:MM:SS)
+                            hora_str_db = hora_local.strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            # 3. Enviamos el string puro a la base de datos
+                            exito = ejecutar_query("INSERT INTO asistencia (empleado_id, sucursal_id, entrada, tipo_registro) VALUES (%s, %s, %s, 'Normal')", (emp_id, suc_id, hora_str_db))
+                            
                             if exito is True:
-                                st.success(f"¡Excelente turno, {emp_sel}! Tu entrada fue registrada exitosamente a las {hora_local.strftime('%H:%M:%S')}. ✅")
+                                st.success(f"Entrada registrada para {emp_sel} a las {hora_local.strftime('%H:%M:%S')}")
                                 import time; time.sleep(2.5); st.rerun()
+                                # (Nota: En la función mostrar_app usa st.error/st.success según corresponda)
 
                 with col2:
                     if st.button("🛑 MARCAR SALIDA", use_container_width=True):
@@ -127,11 +134,18 @@ def mostrar_kiosco_publico():
                             st.error(f"⚠️ {emp_sel}, no tienes un turno abierto para marcar salida.")
                         else:
                             reg_id = check[0]['id']
-                            # Inyección forzada de zona horaria CST
+                            
+                            # 1. Obtenemos la hora local
                             hora_local = datetime.datetime.now(ZoneInfo("America/Mexico_City"))
-                            exito = ejecutar_query("UPDATE asistencia SET salida = %s WHERE id = %s", (hora_local, reg_id))
+                            
+                            # 2. PARCHE CRÍTICO: Casteo estricto a String
+                            hora_str_db = hora_local.strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            # 3. Enviamos el string puro al UPDATE
+                            exito = ejecutar_query("UPDATE asistencia SET salida = %s WHERE id = %s", (hora_str_db, reg_id))
+                            
                             if exito is True:
-                                st.success(f"¡Buen descanso, {emp_sel}! Tu salida fue registrada exitosamente a las {hora_local.strftime('%H:%M:%S')}. 🛑")
+                                st.success(f"Salida registrada para {emp_sel} a las {hora_local.strftime('%H:%M:%S')}")
                                 import time; time.sleep(2.5); st.rerun()
 
 # 4. ESTRUCTURA PRINCIPAL (RBAC)
@@ -229,24 +243,40 @@ def mostrar_app():
                             if check:
                                 st.error(f"⚠️ {emp_sel}, ya tienes un turno abierto. Marca tu salida primero.")
                             else:
-                                exito = ejecutar_query("INSERT INTO asistencia (empleado_id, sucursal_id, entrada, tipo_registro) VALUES (%s, %s, NOW(), 'Normal')", (emp_id, suc_id))
+                                # 1. Obtenemos la hora local
+                                hora_local = datetime.datetime.now(ZoneInfo("America/Mexico_City"))
+                                
+                                # 2. PARCHE CRÍTICO: Casteo estricto a String (YYYY-MM-DD HH:MM:SS)
+                                hora_str_db = hora_local.strftime('%Y-%m-%d %H:%M:%S')
+                                
+                                # 3. Enviamos el string puro a la base de datos
+                                exito = ejecutar_query("INSERT INTO asistencia (empleado_id, sucursal_id, entrada, tipo_registro) VALUES (%s, %s, %s, 'Normal')", (emp_id, suc_id, hora_str_db))
+                                
                                 if exito is True:
-                                    st.success(f"Entrada registrada para {emp_sel} a las {datetime.datetime.now().strftime('%H:%M:%S')}")
-                                else:
-                                    st.error("Fallo de comunicación con el servidor.")
+                                    st.success(f"Entrada registrada para {emp_sel} a las {hora_local.strftime('%H:%M:%S')}")
+                                    import time; time.sleep(2.5); st.rerun()
+                                    # (Nota: En la función mostrar_app usa st.error/st.success según corresponda)
 
-                    with col2:
-                        if st.button("🛑 MARCAR SALIDA", use_container_width=True):
-                            check = ejecutar_query("SELECT id FROM asistencia WHERE empleado_id = %s AND salida IS NULL ORDER BY entrada DESC LIMIT 1", (emp_id,), fetch=True)
-                            if not check:
-                                st.error(f"⚠️ {emp_sel}, no tienes un turno abierto para marcar salida.")
-                            else:
-                                reg_id = check[0]['id']
-                                exito = ejecutar_query("UPDATE asistencia SET salida = NOW() WHERE id = %s", (reg_id,))
-                                if exito is True:
-                                    st.success(f"Salida registrada para {emp_sel} a las {datetime.datetime.now().strftime('%H:%M:%S')}")
-                                else:
-                                    st.error("Fallo de comunicación con el servidor.")
+                with col2:
+                    if st.button("🛑 MARCAR SALIDA", use_container_width=True):
+                        check = ejecutar_query("SELECT id FROM asistencia WHERE empleado_id = %s AND salida IS NULL ORDER BY entrada DESC LIMIT 1", (emp_id,), fetch=True)
+                        if not check:
+                            st.error(f"⚠️ {emp_sel}, no tienes un turno abierto para marcar salida.")
+                        else:
+                            reg_id = check[0]['id']
+                            
+                            # 1. Obtenemos la hora local
+                            hora_local = datetime.datetime.now(ZoneInfo("America/Mexico_City"))
+                            
+                            # 2. PARCHE CRÍTICO: Casteo estricto a String
+                            hora_str_db = hora_local.strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            # 3. Enviamos el string puro al UPDATE
+                            exito = ejecutar_query("UPDATE asistencia SET salida = %s WHERE id = %s", (hora_str_db, reg_id))
+                            
+                            if exito is True:
+                                st.success(f"Salida registrada para {emp_sel} a las {hora_local.strftime('%H:%M:%S')}")
+                                import time; time.sleep(2.5); st.rerun()
         
     elif seleccion == "📝 Registrar Encargos":
         st.title("📊 Registro Operativo y Bonos")
@@ -959,18 +989,46 @@ def mostrar_app():
         st.title("🕒 Auditoría y Corrección de Horarios")
         st.markdown("Módulo exclusivo para Administración. Corrige turnos huérfanos (olvido de salida) o errores de registro.")
 
-        empleados = ejecutar_query("SELECT id, nombre FROM empleados ORDER BY nombre", fetch=True) or []
+        # 1. Extraer catálogo de sucursales para el filtro primario
+        sucursales = ejecutar_query("SELECT id, nombre FROM sucursales ORDER BY nombre", fetch=True) or []
+        mapa_suc = {s['nombre']: s['id'] for s in sucursales}
+        opciones_suc = ["Todas las Sucursales"] + list(mapa_suc.keys())
         
-        if not empleados:
-            st.warning("No hay empleados registrados en el sistema.")
-        else:
-            mapa_emp = {e['nombre']: e['id'] for e in empleados}
+        with st.container(border=True):
+            c1, c2, c3 = st.columns([2, 1, 1])
+            suc_sel = c1.selectbox("🏢 1. Filtrar por Sucursal", opciones_suc)
+            f_ini = c2.date_input("📅 Desde", datetime.date.today() - datetime.timedelta(days=7))
+            f_fin = c3.date_input("📅 Hasta", datetime.date.today())
+
+            # 2. Filtrado reactivo de empleados según la sucursal seleccionada
+            if suc_sel == "Todas las Sucursales":
+                query_emp = "SELECT id, nombre FROM empleados ORDER BY nombre"
+                empleados = ejecutar_query(query_emp, fetch=True) or []
+            else:
+                suc_id = mapa_suc[suc_sel]
+                query_emp = "SELECT id, nombre FROM empleados WHERE sucursal_base_id = %s ORDER BY nombre"
+                empleados = ejecutar_query(query_emp, (suc_id,), fetch=True) or []
+                
+            st.markdown("---")
             
-            with st.container(border=True):
-                c1, c2, c3 = st.columns([2, 1, 1])
-                emp_sel = c1.selectbox("👤 Seleccionar Colaborador", list(mapa_emp.keys()))
-                f_ini = c2.date_input("📅 Desde", datetime.date.today() - datetime.timedelta(days=7))
-                f_fin = c3.date_input("📅 Hasta", datetime.date.today())
+            # 3. Renderizado del segundo nivel del filtro en cascada
+            if not empleados:
+                st.warning("No hay colaboradores asignados a la sucursal seleccionada.")
+                emp_id = None
+            else:
+                mapa_emp = {e['nombre']: e['id'] for e in empleados}
+                emp_sel = st.selectbox("👤 2. Seleccionar Colaborador", list(mapa_emp.keys()))
+                emp_id = mapa_emp[emp_sel]
+            
+        # 4. Motor transaccional de búsqueda y renderizado de tablas
+        if emp_id:
+            query_asis = """
+                SELECT id, entrada, salida, tipo_registro
+                FROM asistencia 
+                WHERE empleado_id = %s AND DATE(entrada) >= %s AND DATE(entrada) <= %s
+                ORDER BY entrada DESC
+            """
+            registros = ejecutar_query(query_asis, (emp_id, f_ini, f_fin), fetch=True)
             
             emp_id = mapa_emp[emp_sel]
             
